@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"strings"
 )
 
 func main() {
+	isBreak := false
 	for {
 		fmt.Print("$ ")
 
@@ -21,11 +23,21 @@ func main() {
 
 		input := scanner.Text()
 
-		if input == "exit" {
-			break
+		params := strings.Split(input, " ")
+
+		switch params[0] {
+		case "exit":
+			isBreak = true
+		case "echo":
+			theRestOfCommand := input[len(params[0])+1:] // the last 1 is for the space!
+			fmt.Println(theRestOfCommand)
+		default:
+			fmt.Printf("%s: command not found\n", input)
 		}
 
-		fmt.Printf("%s: command not found\n", input)
+		if isBreak {
+			break
+		}
 
 	}
 
