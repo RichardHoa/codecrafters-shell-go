@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"os/exec"
+	_ "path/filepath"
 	"slices"
 	"strings"
 )
@@ -29,16 +31,20 @@ func main() {
 
 		params := strings.Split(input, " ")
 
-		// fmt.Printf("DEBUGGING: |%v|\n", params)
-
 		command := params[0]
 
 		switch command {
 		case "type":
-			if slices.Contains(validCommands, params[1]) {
+			toolName := params[1]
+			if slices.Contains(validCommands, toolName) {
 				fmt.Printf("%s is a shell builtin\n", params[1])
 			} else {
-				fmt.Printf("%s: not found\n", params[1])
+				absPath, err := exec.LookPath(toolName)
+				if err == nil {
+					fmt.Printf("%v is %v\n", toolName, absPath)
+				} else {
+					fmt.Printf("%s: not found\n", toolName)
+				}
 			}
 		case "exit":
 			isBreak = true
@@ -55,4 +61,8 @@ func main() {
 
 	}
 
+}
+
+func debug(input any) {
+	fmt.Printf("DEBUGGING: |%v|\n", input)
 }
