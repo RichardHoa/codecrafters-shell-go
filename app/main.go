@@ -41,7 +41,9 @@ func main() {
 			} else {
 				absPath, err := exec.LookPath(toolName)
 				if err == nil {
-					fmt.Printf("%v is %v\n", toolName, absPath)
+					otherArgvs := params[1:]
+					debug(absPath)
+					debug(otherArgvs)
 				} else {
 					fmt.Printf("%s: not found\n", toolName)
 				}
