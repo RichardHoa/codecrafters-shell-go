@@ -43,7 +43,7 @@ func main() {
 				if err == nil {
 					fmt.Printf("%s is %s\n", toolName, absPath)
 				} else {
-					fmt.Printf("%s: not found\n", toolName)
+					fmt.Printf("%s: not found", toolName)
 				}
 			}
 		case "exit":
@@ -52,11 +52,11 @@ func main() {
 			restOfTheCommand := input[len(params[0])+1:] // the last 1 is for the space!
 			fmt.Println(restOfTheCommand)
 		default:
-			_, err := exec.LookPath(command)
+			absPath, err := exec.LookPath(command)
 			if err == nil {
 				otherArgvs := params[1:]
 
-				cmd := exec.Command(command, otherArgvs...)
+				cmd := exec.Command(absPath, otherArgvs...)
 
 				output, err := cmd.Output()
 				if err != nil {
