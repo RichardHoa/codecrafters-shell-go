@@ -11,9 +11,6 @@ import (
 )
 
 func main() {
-	validCommands := []string{"type", "exit", "echo"}
-
-	isBreak := false
 
 	for {
 		fmt.Print("$ ")
@@ -21,7 +18,6 @@ func main() {
 		scanner := bufio.NewScanner(os.Stdin)
 
 		scanner.Scan()
-
 		err := scanner.Err()
 		if err != nil {
 			fmt.Printf("Fatal error: %v\n", err)
@@ -29,52 +25,70 @@ func main() {
 
 		input := scanner.Text()
 
-		params := strings.Split(input, " ")
+		args := strings.Split(input, " ")
 
-		command := params[0]
+		command := args[0]
 
 		switch command {
 		case "type":
-			toolName := params[1]
-			if slices.Contains(validCommands, toolName) {
-				fmt.Printf("%s is a shell builtin\n", params[1])
-			} else {
-				absPath, err := exec.LookPath(toolName)
-				if err == nil {
-					fmt.Printf("%s is %s\n", toolName, absPath)
-				} else {
-					fmt.Printf("%s: not found\n", toolName)
-				}
-			}
+			handleType(args)
 		case "exit":
-			isBreak = true
+			handleExit()
 		case "echo":
-			restOfTheCommand := input[len(params[0])+1:] // the last 1 is for the space!
-			fmt.Println(restOfTheCommand)
+			handleEcho(args)
 		default:
-			_, err := exec.LookPath(command)
-			if err == nil {
-				otherArgvs := params[1:]
-
-				cmd := exec.Command(command, otherArgvs...)
-
-				output, err := cmd.Output()
-				if err != nil {
-					fmt.Println(err)
-				}
-				fmt.Printf("%s", output)
-			} else {
-				fmt.Printf("%s: not found\n", command)
-			}
-
-		}
-
-		if isBreak {
-			break
+			handleDefault(args)
 		}
 
 	}
 
+}
+
+func handleType(args []string) {
+	toolName := args[1]
+	validTools := []string{"type", "exit", "echo"}
+
+	if slices.Contains(validTools, toolName) {
+		fmt.Printf("%s is a shell builtin\n", toolName)
+	} else {
+		absPath, err := exec.LookPath(toolName)
+		if err == nil {
+			fmt.Printf("%s is %s\n", toolName, absPath)
+		} else {
+			fmt.Printf("%s: not found\n", toolName)
+		}
+	}
+
+}
+
+func handleExit() {
+	os.Exit(0)
+}
+
+func handleEcho(args []string) {
+	restOfTheCommand := strings.Join(args[1:], " ")
+	fmt.Println(restOfTheCommand)
+
+}
+
+func handleDefault(args []string) {
+	command := args[0]
+
+	_, err := exec.LookPath(command)
+	if err == nil {
+		otherArgs := args[1:]
+
+		cmd := exec.Command(command, otherArgs...)
+
+		output, err := cmd.Output()
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		fmt.Printf("%s", output)
+	} else {
+		fmt.Printf("%s: not found\n", command)
+	}
 }
 
 func debug(input any) {
