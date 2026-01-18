@@ -48,7 +48,12 @@ func main() {
 
 }
 func handleCD(args []string) {
-	path := args[1]
+	var path string
+	if len(args) > 1 {
+		path = args[1]
+	} else {
+		path = "~"
+	}
 
 	if path == "~" {
 		homePath := os.Getenv("HOME")
@@ -78,18 +83,18 @@ func handleCD(args []string) {
 
 		var joinedPath string
 
-		if filepath.IsLocal(path) {
+		if filepath.IsAbs(path) {
+			joinedPath = filepath.Join(path)
+		} else {
+			// the path can be a local path or a ../ path
 			currentDirectory, err := filepath.Abs("./")
 			if err != nil {
 				printToConsole(
 					fmt.Sprintf("Cannot check current directory path: %v", err),
 				)
 			}
-			joinedPath = filepath.Join(currentDirectory, path)
-		}
 
-		if filepath.IsAbs(path) {
-			joinedPath = filepath.Join(path)
+			joinedPath = filepath.Join(currentDirectory, path)
 		}
 
 		err = os.Chdir(joinedPath)
