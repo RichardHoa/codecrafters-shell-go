@@ -30,6 +30,8 @@ func main() {
 		command := args[0]
 
 		switch command {
+		case "cd":
+			handleCD(args)
 		case "pwd":
 			handlePWD()
 		case "type":
@@ -40,6 +42,45 @@ func main() {
 			handleEcho(args)
 		default:
 			handleDefault(args)
+		}
+
+	}
+
+}
+func handleCD(args []string) {
+	path := args[1]
+	_, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			printToConsole(
+				fmt.Sprintf("cd: %s: No such file or directory\n", path),
+			)
+		} else {
+			panic(fmt.Sprintf("Unexpected error: %v", err))
+		}
+	}
+
+	if err == nil {
+
+		var joinedPath string
+
+		if filepath.IsLocal(path) {
+			home, err := filepath.Abs("./")
+			if err != nil {
+				printToConsole(
+					fmt.Sprintf("Cannot check current directory path: %v", err),
+				)
+			}
+			joinedPath = filepath.Join(home, path)
+		} else {
+			joinedPath = filepath.Join(path)
+		}
+
+		err = os.Chdir(joinedPath)
+		if err != nil {
+			printToConsole(
+				fmt.Sprintf("Cannot change to specified location although it exists: %v\n", err),
+			)
 		}
 
 	}
