@@ -79,14 +79,16 @@ func handleCD(args []string) {
 		var joinedPath string
 
 		if filepath.IsLocal(path) {
-			home, err := filepath.Abs("./")
+			currentDirectory, err := filepath.Abs("./")
 			if err != nil {
 				printToConsole(
 					fmt.Sprintf("Cannot check current directory path: %v", err),
 				)
 			}
-			joinedPath = filepath.Join(home, path)
-		} else {
+			joinedPath = filepath.Join(currentDirectory, path)
+		}
+
+		if filepath.IsAbs(path) {
 			joinedPath = filepath.Join(path)
 		}
 
@@ -104,8 +106,11 @@ func handleCD(args []string) {
 func handlePWD() {
 	dir, err := filepath.Abs("./")
 	if err != nil {
-		panic(fmt.Sprintf("Error while using file path absolute %v", err))
+		printToConsole(
+			fmt.Sprintf("Cannot check current directory path: %v", err),
+		)
 	}
+
 	printToConsole(
 		fmt.Sprintln(dir),
 	)
