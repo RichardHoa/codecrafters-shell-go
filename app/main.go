@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	_ "path/filepath"
+	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -30,6 +30,8 @@ func main() {
 		command := args[0]
 
 		switch command {
+		case "pwd":
+			handlePWD()
 		case "type":
 			handleType(args)
 		case "exit":
@@ -44,18 +46,34 @@ func main() {
 
 }
 
+func handlePWD() {
+	dir, err := filepath.Abs("./")
+	if err != nil {
+		panic(fmt.Sprintf("Error while using file path absolute %v", err))
+	}
+	printToConsole(
+		fmt.Sprintln(dir),
+	)
+
+}
 func handleType(args []string) {
 	toolName := args[1]
-	validTools := []string{"type", "exit", "echo"}
+	validTools := []string{"type", "exit", "echo", "pwd"}
 
 	if slices.Contains(validTools, toolName) {
-		fmt.Printf("%s is a shell builtin\n", toolName)
+		printToConsole(
+			fmt.Sprintf("%s is a shell builtin\n", toolName),
+		)
 	} else {
 		absPath, err := exec.LookPath(toolName)
 		if err == nil {
-			fmt.Printf("%s is %s\n", toolName, absPath)
+			printToConsole(
+				fmt.Sprintf("%s is %s\n", toolName, absPath),
+			)
 		} else {
-			fmt.Printf("%s: not found\n", toolName)
+			printToConsole(
+				fmt.Sprintf("%s: not found\n", toolName),
+			)
 		}
 	}
 
@@ -67,7 +85,9 @@ func handleExit() {
 
 func handleEcho(args []string) {
 	restOfTheCommand := strings.Join(args[1:], " ")
-	fmt.Println(restOfTheCommand)
+	printToConsole(
+		fmt.Sprintln(restOfTheCommand),
+	)
 
 }
 
@@ -85,12 +105,26 @@ func handleDefault(args []string) {
 			fmt.Println(err)
 		}
 
-		fmt.Printf("%s", output)
+		printToConsole(
+			fmt.Sprintf("%s", output),
+		)
 	} else {
-		fmt.Printf("%s: not found\n", command)
+		printToConsole(
+			fmt.Sprintf("%s: not found\n", command),
+		)
 	}
 }
 
 func debug(input any) {
 	fmt.Printf("DEBUGGING: |%#v|\n", input)
+}
+
+func printToConsole(input string) {
+	_, err := fmt.Printf("%s", input)
+
+	if err != nil {
+		str := fmt.Sprintf("Error while printing value to the console: %s", err)
+		panic(str)
+	}
+
 }
