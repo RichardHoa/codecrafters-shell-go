@@ -49,6 +49,20 @@ func main() {
 }
 func handleCD(args []string) {
 	path := args[1]
+
+	if path == "~" {
+		homePath := os.Getenv("HOME")
+
+		err := os.Chdir(homePath)
+		if err != nil {
+			printToConsole(
+				fmt.Sprintf("Cannot change to home directory: %v", err),
+			)
+		}
+
+		return
+	}
+
 	_, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
