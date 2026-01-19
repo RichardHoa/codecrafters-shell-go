@@ -26,8 +26,11 @@ func main() {
 		input := scanner.Text()
 
 		args := strings.Split(input, " ")
+		if strings.Contains(input, "'") {
+			args = strings.Split(input, "'")
+		}
 
-		command := args[0]
+		command := strings.TrimSpace(args[0])
 
 		switch command {
 		case "cd":
@@ -39,7 +42,7 @@ func main() {
 		case "exit":
 			handleExit()
 		case "echo":
-			handleEcho(args)
+			handleEcho(input)
 		default:
 			handleDefault(args)
 		}
@@ -64,7 +67,6 @@ func handleCD(args []string) {
 				fmt.Sprintf("Cannot change to home directory: %v", err),
 			)
 		}
-
 		return
 	}
 
@@ -80,7 +82,6 @@ func handleCD(args []string) {
 	}
 
 	if err == nil {
-
 		var joinedPath string
 
 		if filepath.IsAbs(path) {
@@ -148,20 +149,42 @@ func handleExit() {
 	os.Exit(0)
 }
 
-func handleEcho(args []string) {
-	restOfTheCommand := strings.Join(args[1:], " ")
+func handleEcho(input string) {
+	var output string
+	args := strings.SplitAfterN(input, " ", 2)
+
+	restOfTheCommand := args[1]
+
+	singleQuoteCounts := strings.Count(restOfTheCommand, "'")
+
+	// check for valid single quotes string
+	if singleQuoteCounts > 0 && singleQuoteCounts%2 == 0 {
+		singleQuoteParts := strings.Split(restOfTheCommand, "'")
+		output = strings.Join(singleQuoteParts, "")
+	} else {
+		//remove all space
+		outputFields := strings.Fields(restOfTheCommand)
+		output = strings.Join(outputFields, " ")
+	}
+
 	printToConsole(
-		fmt.Sprintln(restOfTheCommand),
+		fmt.Sprintln(output),
 	)
 
 }
 
 func handleDefault(args []string) {
-	command := args[0]
+	command := strings.TrimSpace(args[0])
 
 	_, err := exec.LookPath(command)
 	if err == nil {
-		otherArgs := args[1:]
+		var otherArgs []string
+
+		for _, val := range args[1:] {
+			if strings.TrimSpace(val) != "" {
+				otherArgs = append(otherArgs, val)
+			}
+		}
 
 		cmd := exec.Command(command, otherArgs...)
 
