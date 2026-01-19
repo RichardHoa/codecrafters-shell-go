@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"unicode"
 )
 
 func main() {
@@ -25,11 +26,9 @@ func main() {
 
 		input := scanner.Text()
 
-		args := strings.Split(input, " ")
-		if strings.Contains(input, "'") {
-			args = strings.Split(input, "'")
-		}
+		args := SplitByContext(input)
 
+		debug(args)
 		command := strings.TrimSpace(args[0])
 
 		switch command {
@@ -149,28 +148,85 @@ func handleExit() {
 	os.Exit(0)
 }
 
+func deleteExtraWhiteSpace(inputSlice []string) []string {
+	for i := 1; i < len(inputSlice)-1; i++ {
+		current := inputSlice[i]
+		before := inputSlice[i-1]
+		after := inputSlice[i+1]
+
+		if before != "" && after != "" && isPureWhitespace(current) && len(current) >= 2 {
+			inputSlice[i] = " "
+		}
+	}
+
+	return inputSlice
+}
+
 func handleEcho(input string) {
 	var output string
 	args := strings.SplitAfterN(input, " ", 2)
 
 	restOfTheCommand := args[1]
 
-	singleQuoteCounts := strings.Count(restOfTheCommand, "'")
-
-	// check for valid single quotes string
-	if singleQuoteCounts > 0 && singleQuoteCounts%2 == 0 {
-		singleQuoteParts := strings.Split(restOfTheCommand, "'")
-		output = strings.Join(singleQuoteParts, "")
-	} else {
-		//remove all space
-		outputFields := strings.Fields(restOfTheCommand)
-		output = strings.Join(outputFields, " ")
-	}
+	slice := SplitByContext(restOfTheCommand)
+	debug(slice)
 
 	printToConsole(
 		fmt.Sprintln(output),
 	)
+}
 
+func SplitByContext(input string) []string {
+	var result []string
+	var buffer string
+	var activeQuote rune // Stores the quote character (' or ") currently being handled
+
+	for _, char := range input {
+		switch {
+		// 1. HIGHEST PRIORITY: If we are already inside a quote block
+		case activeQuote != 0:
+			if char == activeQuote {
+				result = append(result, buffer) // Save what's inside
+				buffer = ""                     // Clear buffer
+				activeQuote = 0                 // "Exit" quote mode
+			} else {
+				buffer += string(char)
+			}
+
+		// 2. TRIGGER: If we encounter a new opening quote
+		case char == '"' || char == '\'':
+			if buffer != "" {
+				result = append(result, buffer)
+			}
+			buffer = ""        // Start fresh for the inside of the quote
+			activeQuote = char // "Enter" quote mode
+
+		// 3. WHITESPACE: If we are outside quotes and hit a space
+		case unicode.IsSpace(char):
+			// If the buffer currently holds text, save it before starting space segment
+			if buffer != "" && !unicode.IsSpace(rune(buffer[0])) {
+				result = append(result, buffer)
+				buffer = ""
+			}
+			buffer += string(char)
+
+		// 4. PLAIN TEXT: Normal characters outside of quotes
+		default:
+			// If the buffer currently holds spaces, save them before starting text segment
+			if buffer != "" && unicode.IsSpace(rune(buffer[0])) {
+				result = append(result, buffer)
+				buffer = ""
+			}
+			buffer += string(char)
+		}
+	}
+
+	// Catch any remaining content left in the buffer at the end
+	if buffer != "" {
+		result = append(result, buffer)
+	}
+
+	return result
 }
 
 func handleDefault(args []string) {
@@ -205,6 +261,18 @@ func handleDefault(args []string) {
 
 func debug(input any) {
 	fmt.Printf("DEBUGGING: |%#v|\n", input)
+}
+
+func isPureWhitespace(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	for _, r := range s {
+		if !unicode.IsSpace(r) {
+			return false
+		}
+	}
+	return true
 }
 
 func printToConsole(input string) {

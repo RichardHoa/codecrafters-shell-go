@@ -32,3 +32,7 @@ Note: This section is for stages 2 and beyond.
    `app/main.go`.
 1. Commit your changes and run `git push origin master` to submit your solution
    to CodeCrafters. Test output will be streamed to your terminal.
+
+
+# TODO
+Reimplement the split function and fix all the other funcitons before coming to echo again
