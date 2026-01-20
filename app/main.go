@@ -178,52 +178,70 @@ func handleEcho(input string) {
 
 func SplitByContext(input string) []string {
 	var result []string
-	var buffer string
-	var activeQuote rune // Stores the quote character (' or ") currently being handled
+
+	var buffer strings.Builder
+	var activeQuote rune
+	var isSpaceOnly bool
 
 	for _, char := range input {
-		switch {
-		// 1. HIGHEST PRIORITY: If we are already inside a quote block
-		case activeQuote != 0:
+		// if we are in a quote string
+		if activeQuote != 0 {
+			// if we reach the closing quote
 			if char == activeQuote {
-				result = append(result, buffer) // Save what's inside
-				buffer = ""                     // Clear buffer
-				activeQuote = 0                 // "Exit" quote mode
+				// save the buffer to the result
+				result = append(result, buffer.String())
+				// reset it
+				buffer.Reset()
+				// set the active quote to nil (which is 0 in this case)
+				activeQuote = 0
 			} else {
-				buffer += string(char)
+				// if we do not reach the closing quote, keep adding rune
+				buffer.WriteRune(char)
 			}
+			// because we already process the rune, we skip to the next one, no need to do further check
+			continue
+		}
 
-		// 2. TRIGGER: If we encounter a new opening quote
+		switch {
+		// if we encounter the quote
 		case char == '"' || char == '\'':
-			if buffer != "" {
-				result = append(result, buffer)
+			// if we have anything before the quote, push it to the result
+			if buffer.Len() > 0 {
+				result = append(result, buffer.String())
+				buffer.Reset()
 			}
-			buffer = ""        // Start fresh for the inside of the quote
-			activeQuote = char // "Enter" quote mode
+			// set the active quote to the char
+			activeQuote = char
 
-		// 3. WHITESPACE: If we are outside quotes and hit a space
 		case unicode.IsSpace(char):
-			// If the buffer currently holds text, save it before starting space segment
-			if buffer != "" && !unicode.IsSpace(rune(buffer[0])) {
-				result = append(result, buffer)
-				buffer = ""
+			// if we have anything before the quote AND our string in buffer is not all space
+			if buffer.Len() > 0 && !isSpaceOnly {
+				// push the current string to the result and then reset it
+				result = append(result, buffer.String())
+				buffer.Reset()
 			}
-			buffer += string(char)
+			// set the space to true
+			isSpaceOnly = true
+			// write to the buffer
+			buffer.WriteRune(char)
 
-		// 4. PLAIN TEXT: Normal characters outside of quotes
 		default:
-			// If the buffer currently holds spaces, save them before starting text segment
-			if buffer != "" && unicode.IsSpace(rune(buffer[0])) {
-				result = append(result, buffer)
-				buffer = ""
+			// this case is for normal character OUTSIDE of quote
+			// if we encounter a character and the buffer contains all space
+			if buffer.Len() > 0 && isSpaceOnly {
+				// we add the space buffer to the result
+				result = append(result, buffer.String())
+				buffer.Reset()
 			}
-			buffer += string(char)
+			// remember to set the space to false
+			isSpaceOnly = false
+
+			buffer.WriteRune(char)
 		}
 	}
 
-	// Catch any remaining content left in the buffer at the end
-	if buffer != "" {
-		result = append(result, buffer)
+	if buffer.Len() > 0 {
+		result = append(result, buffer.String())
 	}
 
 	return result
