@@ -26,35 +26,41 @@ func main() {
 
 		input := scanner.Text()
 
-		args := SplitByContext(input)
+		args := SplitArgs(input)
+		noSpaceArgs := deleteSpace(args)
 
-		debug(args)
 		command := strings.TrimSpace(args[0])
 
 		switch command {
 		case "cd":
-			handleCD(args)
+			handleCD(noSpaceArgs)
 		case "pwd":
 			handlePWD()
 		case "type":
-			handleType(args)
+			handleType(noSpaceArgs)
 		case "exit":
 			handleExit()
 		case "echo":
-			handleEcho(input)
+			handleEcho(args)
 		default:
-			handleDefault(args)
+			handleDefault(noSpaceArgs)
 		}
 
 	}
 
 }
-func handleCD(args []string) {
+func handleCD(noSpaceArgs []string) {
 	var path string
-	if len(args) > 1 {
-		path = args[1]
-	} else {
+	argsLength := len(noSpaceArgs)
+
+	switch argsLength {
+	case 1:
 		path = "~"
+	case 2:
+		path = noSpaceArgs[1]
+	default:
+		printErrorToConsole("Too many agrument, maximum of one agrument\n")
+		return
 	}
 
 	if path == "~" {
@@ -62,7 +68,7 @@ func handleCD(args []string) {
 
 		err := os.Chdir(homePath)
 		if err != nil {
-			printToConsole(
+			printErrorToConsole(
 				fmt.Sprintf("Cannot change to home directory: %v", err),
 			)
 		}
@@ -72,7 +78,7 @@ func handleCD(args []string) {
 	_, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			printToConsole(
+			printErrorToConsole(
 				fmt.Sprintf("cd: %s: No such file or directory\n", path),
 			)
 		} else {
@@ -89,7 +95,7 @@ func handleCD(args []string) {
 			// the path can be a local path or a ../ path
 			currentDirectory, err := filepath.Abs("./")
 			if err != nil {
-				printToConsole(
+				printErrorToConsole(
 					fmt.Sprintf("Cannot check current directory path: %v", err),
 				)
 			}
@@ -99,7 +105,7 @@ func handleCD(args []string) {
 
 		err = os.Chdir(joinedPath)
 		if err != nil {
-			printToConsole(
+			printErrorToConsole(
 				fmt.Sprintf("Cannot change to specified location although it exists: %v\n", err),
 			)
 		}
@@ -121,8 +127,8 @@ func handlePWD() {
 	)
 
 }
-func handleType(args []string) {
-	toolName := args[1]
+func handleType(noSpaceArgs []string) {
+	toolName := noSpaceArgs[1]
 	validTools := []string{"type", "exit", "echo", "pwd"}
 
 	if slices.Contains(validTools, toolName) {
@@ -148,103 +154,92 @@ func handleExit() {
 	os.Exit(0)
 }
 
-func deleteExtraWhiteSpace(inputSlice []string) []string {
-	for i := 1; i < len(inputSlice)-1; i++ {
-		current := inputSlice[i]
-		before := inputSlice[i-1]
-		after := inputSlice[i+1]
+func handleEcho(args []string) {
+	if strings.TrimSpace(args[1]) != "" {
+		printErrorToConsole("wrong command format. echo command")
+	}
 
-		if before != "" && after != "" && isPureWhitespace(current) && len(current) >= 2 {
-			inputSlice[i] = " "
+	var output []string
+
+	restOfTheCommand := args[2:]
+
+	emptySpace := " "
+	for _, val := range restOfTheCommand {
+		if val == "" {
+			continue
+		} else if strings.TrimSpace(val) == "" {
+			output = append(output, emptySpace)
+		} else {
+			output = append(output, val)
 		}
 	}
 
-	return inputSlice
-}
+	// debug(restOfTheCommand)
 
-func handleEcho(input string) {
-	var output string
-	args := strings.SplitAfterN(input, " ", 2)
-
-	restOfTheCommand := args[1]
-
-	slice := SplitByContext(restOfTheCommand)
-	debug(slice)
+	// debug(output)
 
 	printToConsole(
-		fmt.Sprintln(output),
+		fmt.Sprintf("%s\n", strings.Join(output, "")),
 	)
+
 }
 
-func SplitByContext(input string) []string {
-	var result []string
-
+func SplitArgs(input string) (output []string) {
 	var buffer strings.Builder
 	var activeQuote rune
 	var isSpaceOnly bool
 
 	for _, char := range input {
-		// if we are in a quote string
+		// we are already inside an active quote
 		if activeQuote != 0 {
-			// if we reach the closing quote
 			if char == activeQuote {
-				// save the buffer to the result
-				result = append(result, buffer.String())
-				// reset it
+				output = append(output, buffer.String())
 				buffer.Reset()
-				// set the active quote to nil (which is 0 in this case)
 				activeQuote = 0
 			} else {
-				// if we do not reach the closing quote, keep adding rune
 				buffer.WriteRune(char)
 			}
-			// because we already process the rune, we skip to the next one, no need to do further check
 			continue
 		}
 
 		switch {
-		// if we encounter the quote
+		// encounter an active quote for the first time
 		case char == '"' || char == '\'':
-			// if we have anything before the quote, push it to the result
 			if buffer.Len() > 0 {
-				result = append(result, buffer.String())
+				output = append(output, buffer.String())
 				buffer.Reset()
 			}
-			// set the active quote to the char
 			activeQuote = char
 
-		case unicode.IsSpace(char):
-			// if we have anything before the quote AND our string in buffer is not all space
-			if buffer.Len() > 0 && !isSpaceOnly {
-				// push the current string to the result and then reset it
-				result = append(result, buffer.String())
-				buffer.Reset()
-			}
-			// set the space to true
-			isSpaceOnly = true
-			// write to the buffer
-			buffer.WriteRune(char)
-
-		default:
-			// this case is for normal character OUTSIDE of quote
-			// if we encounter a character and the buffer contains all space
+		// encounter a character
+		case !unicode.IsSpace(char):
 			if buffer.Len() > 0 && isSpaceOnly {
-				// we add the space buffer to the result
-				result = append(result, buffer.String())
+				output = append(output, buffer.String())
 				buffer.Reset()
 			}
-			// remember to set the space to false
 			isSpaceOnly = false
 
 			buffer.WriteRune(char)
+
+		case unicode.IsSpace(char):
+			if buffer.Len() > 0 && !isSpaceOnly {
+				output = append(output, buffer.String())
+				buffer.Reset()
+			}
+			isSpaceOnly = true
+
+			buffer.WriteRune(char)
 		}
+
 	}
 
 	if buffer.Len() > 0 {
-		result = append(result, buffer.String())
+		output = append(output, buffer.String())
+		buffer.Reset()
 	}
 
-	return result
+	return output
+
 }
 
 func handleDefault(args []string) {
@@ -252,19 +247,14 @@ func handleDefault(args []string) {
 
 	_, err := exec.LookPath(command)
 	if err == nil {
-		var otherArgs []string
 
-		for _, val := range args[1:] {
-			if strings.TrimSpace(val) != "" {
-				otherArgs = append(otherArgs, val)
-			}
-		}
-
-		cmd := exec.Command(command, otherArgs...)
+		cmd := exec.Command(command, args[1:]...)
 
 		output, err := cmd.Output()
 		if err != nil {
-			fmt.Println(err)
+			printErrorToConsole(
+				fmt.Sprintf("Cannot execute command: %v", err),
+			)
 		}
 
 		printToConsole(
@@ -277,24 +267,32 @@ func handleDefault(args []string) {
 	}
 }
 
+func deleteSpace(input []string) (output []string) {
+	for _, val := range input {
+		if strings.TrimSpace(val) != "" {
+			output = append(output, val)
+		}
+	}
+
+	return output
+}
+
 func debug(input any) {
 	fmt.Printf("DEBUGGING: |%#v|\n", input)
 }
 
-func isPureWhitespace(s string) bool {
-	if len(s) == 0 {
-		return false
+func printToConsole(input string) {
+	_, err := fmt.Fprintf(os.Stdout, "%s", input)
+
+	if err != nil {
+		str := fmt.Sprintf("Error while printing value to the console: %s", err)
+		panic(str)
 	}
-	for _, r := range s {
-		if !unicode.IsSpace(r) {
-			return false
-		}
-	}
-	return true
+
 }
 
-func printToConsole(input string) {
-	_, err := fmt.Printf("%s", input)
+func printErrorToConsole(input string) {
+	_, err := fmt.Fprintf(os.Stderr, "%s", input)
 
 	if err != nil {
 		str := fmt.Sprintf("Error while printing value to the console: %s", err)
