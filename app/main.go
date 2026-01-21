@@ -157,6 +157,7 @@ func handleExit() {
 func handleEcho(args []string) {
 	if strings.TrimSpace(args[1]) != "" {
 		printErrorToConsole("wrong command format. echo command")
+		return
 	}
 
 	var output []string
@@ -174,10 +175,6 @@ func handleEcho(args []string) {
 		}
 	}
 
-	// debug(restOfTheCommand)
-
-	// debug(output)
-
 	printToConsole(
 		fmt.Sprintf("%s\n", strings.Join(output, "")),
 	)
@@ -188,10 +185,26 @@ func SplitArgs(input string) (output []string) {
 	var buffer strings.Builder
 	var activeQuote rune
 	var isSpaceOnly bool
+	var isNextCharLiteral bool
 
 	for _, char := range input {
-		// we are already inside an active quote
-		if activeQuote != 0 {
+
+		switch {
+
+		case isNextCharLiteral:
+			buffer.WriteRune(char)
+			isNextCharLiteral = false
+
+		case char == '\\':
+			if buffer.Len() > 0 && isSpaceOnly {
+				output = append(output, buffer.String())
+				buffer.Reset()
+			}
+
+			isNextCharLiteral = true
+
+		// if we are inside an active quote
+		case activeQuote != 0:
 			if char == activeQuote {
 				output = append(output, buffer.String())
 				buffer.Reset()
@@ -199,10 +212,7 @@ func SplitArgs(input string) (output []string) {
 			} else {
 				buffer.WriteRune(char)
 			}
-			continue
-		}
 
-		switch {
 		// encounter an active quote for the first time
 		case char == '"' || char == '\'':
 			if buffer.Len() > 0 {
@@ -253,7 +263,7 @@ func handleDefault(args []string) {
 		output, err := cmd.Output()
 		if err != nil {
 			printErrorToConsole(
-				fmt.Sprintf("Cannot execute command: %v", err),
+				fmt.Sprintf("Cannot execute command: %v\n", err),
 			)
 		}
 
