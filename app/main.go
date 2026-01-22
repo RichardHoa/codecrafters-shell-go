@@ -27,8 +27,9 @@ func main() {
 		input := scanner.Text()
 
 		args := SplitArgs(input)
+		// debug(args)
 
-		if len(args) <= 1 {
+		if len(args) == 0 {
 			printErrorToConsole("There must be a command\n")
 			continue
 		}
@@ -38,8 +39,6 @@ func main() {
 		}
 
 		noSpaceArgs := deleteSpace(args)
-
-		// debug(args)
 
 		command := args[0]
 
