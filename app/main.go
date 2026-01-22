@@ -27,7 +27,6 @@ func main() {
 		input := scanner.Text()
 
 		args := SplitArgs(input)
-
 		noSpaceArgs := deleteSpace(args)
 
 		command := strings.TrimSpace(args[0])
@@ -188,7 +187,7 @@ func SplitArgs(input string) (output []string) {
 	var isSpaceOnly bool
 	var isNextCharLiteral bool
 
-	for _, char := range input {
+	for index, char := range input {
 
 		switch {
 
@@ -196,7 +195,32 @@ func SplitArgs(input string) (output []string) {
 			buffer.WriteRune(char)
 			isNextCharLiteral = false
 
-		case char == '\\' && activeQuote == 0:
+		case char == '\\':
+
+			// we treat everything as literal inside single quote
+			if activeQuote == '\'' {
+				buffer.WriteRune(char)
+				continue
+			}
+
+			// inside double quote we only escape some special characters
+			if activeQuote == '"' {
+				specialCharacters := []string{"\"", "\\"}
+
+				var nextChar string
+				if index+1 <= len(input) {
+					nextChar = string(input[index+1])
+				} else {
+					nextChar = string(char)
+				}
+
+				// if the next char is not one of the special character, we treat the \ litearlly
+				if !slices.Contains(specialCharacters, nextChar) {
+					buffer.WriteRune(char)
+					continue
+				}
+			}
+
 			if buffer.Len() > 0 && isSpaceOnly {
 				output = append(output, buffer.String())
 				buffer.Reset()
@@ -206,6 +230,8 @@ func SplitArgs(input string) (output []string) {
 
 		// if we are inside an active quote
 		case activeQuote != 0:
+			isSpaceOnly = false
+
 			if char == activeQuote {
 				output = append(output, buffer.String())
 				buffer.Reset()
