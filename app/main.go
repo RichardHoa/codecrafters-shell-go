@@ -27,9 +27,19 @@ func main() {
 		input := scanner.Text()
 
 		args := SplitArgs(input)
+
+		if len(args) <= 1 {
+			printErrorToConsole("There must be a command\n")
+			continue
+		}
+
+		if strings.TrimSpace(args[0]) == "" {
+			args = args[1:]
+		}
+
 		noSpaceArgs := deleteSpace(args)
 
-		// debug(args)
+		debug(args)
 
 		command := strings.TrimSpace(args[0])
 
