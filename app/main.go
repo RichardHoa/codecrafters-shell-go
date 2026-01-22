@@ -29,7 +29,7 @@ func main() {
 		args := SplitArgs(input)
 		noSpaceArgs := deleteSpace(args)
 
-		debug(args)
+		// debug(args)
 
 		command := strings.TrimSpace(args[0])
 
