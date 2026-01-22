@@ -220,9 +220,9 @@ func SplitArgs(input string) (output []string) {
 				} else {
 					buffer.WriteRune(char)
 				}
-				// if we are not inside a quote string, we escape the next char
-				// case 0:
-				// 	isNextCharLiteral = true
+			// if we are not inside a quote string, we escape the next char
+			case 0:
+				isNextCharLiteral = true
 			}
 
 			if buffer.Len() > 0 && isSpaceOnly {
