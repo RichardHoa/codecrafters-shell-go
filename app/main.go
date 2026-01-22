@@ -29,7 +29,6 @@ func main() {
 		args := SplitArgs(input)
 		noSpaceArgs := deleteSpace(args)
 
-		debug(args)
 		command := strings.TrimSpace(args[0])
 
 		switch command {
@@ -202,7 +201,6 @@ func SplitArgs(input string) (output []string) {
 			// we treat everything as literal inside single quote
 			case activeQuote == '\'':
 				buffer.WriteRune(char)
-				continue
 			// inside double quote we only escape some special characters
 			case activeQuote == '"':
 				specialCharacters := []string{"\"", "\\"}
@@ -214,14 +212,14 @@ func SplitArgs(input string) (output []string) {
 					nextChar = string(char)
 				}
 
-				// if the next char is not one of the special character, we treat the slash litearlly
-				if !slices.Contains(specialCharacters, nextChar) {
+				// if the next char is one of the special character, we escape the next
+				if slices.Contains(specialCharacters, nextChar) {
+					isNextCharLiteral = true
+				} else {
 					buffer.WriteRune(char)
-					continue
 				}
 			case activeQuote == 0:
 				isNextCharLiteral = true
-
 			}
 
 			if buffer.Len() > 0 && isSpaceOnly {
