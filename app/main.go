@@ -197,6 +197,11 @@ func SplitArgs(input string) (output []string) {
 
 		case char == '\\':
 
+			if buffer.Len() > 0 && isSpaceOnly {
+				output = append(output, buffer.String())
+				buffer.Reset()
+			}
+
 			// we treat everything as literal inside single quote
 			if activeQuote == '\'' {
 				buffer.WriteRune(char)
@@ -214,16 +219,11 @@ func SplitArgs(input string) (output []string) {
 					nextChar = string(char)
 				}
 
-				// if the next char is not one of the special character, we treat the \ litearlly
+				// if the next char is not one of the special character, we treat the slash litearlly
 				if !slices.Contains(specialCharacters, nextChar) {
 					buffer.WriteRune(char)
 					continue
 				}
-			}
-
-			if buffer.Len() > 0 && isSpaceOnly {
-				output = append(output, buffer.String())
-				buffer.Reset()
 			}
 
 			isNextCharLiteral = true
