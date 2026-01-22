@@ -27,6 +27,7 @@ func main() {
 		input := scanner.Text()
 
 		args := SplitArgs(input)
+
 		noSpaceArgs := deleteSpace(args)
 
 		command := strings.TrimSpace(args[0])
@@ -43,7 +44,7 @@ func main() {
 		case "echo":
 			handleEcho(args)
 		default:
-			handleDefault(noSpaceArgs)
+			handleDefault(args)
 		}
 
 	}
@@ -195,7 +196,7 @@ func SplitArgs(input string) (output []string) {
 			buffer.WriteRune(char)
 			isNextCharLiteral = false
 
-		case char == '\\':
+		case char == '\\' && activeQuote == 0:
 			if buffer.Len() > 0 && isSpaceOnly {
 				output = append(output, buffer.String())
 				buffer.Reset()
@@ -254,16 +255,17 @@ func SplitArgs(input string) (output []string) {
 
 func handleDefault(args []string) {
 	command := strings.TrimSpace(args[0])
+	processArgs := processArgsForDefaultFunc(args[1:])
 
 	_, err := exec.LookPath(command)
 	if err == nil {
 
-		cmd := exec.Command(command, args[1:]...)
+		cmd := exec.Command(command, processArgs...)
 
 		output, err := cmd.Output()
 		if err != nil {
 			printErrorToConsole(
-				fmt.Sprintf("Cannot execute command: %v\n", err),
+				fmt.Sprintf("Cannot execute command: |%v| with error: |%v|\n", cmd.String(), err),
 			)
 		}
 
@@ -282,6 +284,30 @@ func deleteSpace(input []string) (output []string) {
 		if strings.TrimSpace(val) != "" {
 			output = append(output, val)
 		}
+	}
+
+	return output
+}
+
+func processArgsForDefaultFunc(rawArgs []string) (output []string) {
+	var buffer strings.Builder
+	for _, val := range rawArgs {
+		isEmtpySpace := strings.TrimSpace(val) == ""
+
+		if !isEmtpySpace {
+			buffer.WriteString(val)
+		} else {
+			if buffer.Len() > 0 {
+				output = append(output, buffer.String())
+				buffer.Reset()
+			}
+		}
+
+	}
+
+	if buffer.Len() > 0 {
+		output = append(output, buffer.String())
+		buffer.Reset()
 	}
 
 	return output
