@@ -39,9 +39,9 @@ func main() {
 
 		noSpaceArgs := deleteSpace(args)
 
-		debug(args)
+		// debug(args)
 
-		command := strings.TrimSpace(args[0])
+		command := args[0]
 
 		switch command {
 		case "cd":
