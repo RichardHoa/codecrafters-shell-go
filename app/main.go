@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -27,7 +29,6 @@ func main() {
 		input := scanner.Text()
 
 		args := SplitArgs(input)
-		// debug(args)
 
 		if len(args) == 0 {
 			printErrorToConsole("There must be a command\n")
@@ -38,7 +39,7 @@ func main() {
 			args = args[1:]
 		}
 
-		noSpaceArgs := deleteSpace(args)
+		noSpaceArgs := deleteSpaceArgs(args)
 
 		command := args[0]
 
@@ -46,7 +47,7 @@ func main() {
 		case "cd":
 			handleCD(noSpaceArgs)
 		case "pwd":
-			handlePWD()
+			handlePWD(noSpaceArgs)
 		case "type":
 			handleType(noSpaceArgs)
 		case "exit":
@@ -87,31 +88,12 @@ func handleCD(noSpaceArgs []string) {
 	}
 
 	_, err := os.Stat(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			printErrorToConsole(
-				fmt.Sprintf("cd: %s: No such file or directory\n", path),
-			)
-		} else {
-			panic(fmt.Sprintf("Unexpected error: %v", err))
-		}
-	}
-
 	if err == nil {
-		var joinedPath string
-
-		if filepath.IsAbs(path) {
-			joinedPath = filepath.Join(path)
-		} else {
-			// the path can be a local path or a ../ path
-			currentDirectory, err := filepath.Abs("./")
-			if err != nil {
-				printErrorToConsole(
-					fmt.Sprintf("Cannot check current directory path: %v", err),
-				)
-			}
-
-			joinedPath = filepath.Join(currentDirectory, path)
+		joinedPath, err := joinPath(path)
+		if err != nil {
+			printErrorToConsole(
+				fmt.Sprintf("Error while join file path: %v\n", err),
+			)
 		}
 
 		err = os.Chdir(joinedPath)
@@ -121,20 +103,29 @@ func handleCD(noSpaceArgs []string) {
 			)
 		}
 
+	} else {
+		if os.IsNotExist(err) {
+			printErrorToConsole(
+				fmt.Sprintf("cd: %s: No such file or directory\n", path),
+			)
+		} else {
+			panic(fmt.Sprintf("Unexpected error: %v", err))
+		}
 	}
 
 }
 
-func handlePWD() {
+func handlePWD(noSpaceArgs []string) {
 	dir, err := filepath.Abs("./")
 	if err != nil {
-		printToConsole(
+		printErrorToConsole(
 			fmt.Sprintf("Cannot check current directory path: %v", err),
 		)
 	}
 
-	printToConsole(
+	outputSuccess(
 		fmt.Sprintln(dir),
+		noSpaceArgs,
 	)
 
 }
@@ -143,17 +134,21 @@ func handleType(noSpaceArgs []string) {
 	validTools := []string{"type", "exit", "echo", "pwd"}
 
 	if slices.Contains(validTools, toolName) {
-		printToConsole(
+		outputSuccess(
 			fmt.Sprintf("%s is a shell builtin\n", toolName),
+			noSpaceArgs,
 		)
 	} else {
 		absPath, err := exec.LookPath(toolName)
 		if err == nil {
-			printToConsole(
+			outputSuccess(
 				fmt.Sprintf("%s is %s\n", toolName, absPath),
+				noSpaceArgs,
 			)
+
 		} else {
-			printToConsole(
+			// NOTE:ERROR HERE
+			printErrorToConsole(
 				fmt.Sprintf("%s: not found\n", toolName),
 			)
 		}
@@ -161,11 +156,35 @@ func handleType(noSpaceArgs []string) {
 
 }
 
+func findRedirectStdout(noSpaceArgs []string) (filePath string, err error) {
+	counter := 0
+
+	for index, val := range noSpaceArgs {
+		if val == ">" || val == "1>" {
+			counter++
+			if index == len(noSpaceArgs)-1 {
+				return "", errors.New("Direct stdout sign but no file\n")
+			}
+
+			filePath = noSpaceArgs[index+1]
+
+		}
+	}
+
+	if counter > 1 {
+		return "", errors.New("Can only pipe to one file only\n")
+	}
+
+	return filePath, nil
+}
+
 func handleExit() {
 	os.Exit(0)
 }
 
 func handleEcho(args []string) {
+	ignoredStrings := []string{">", "1>"}
+
 	if strings.TrimSpace(args[1]) != "" {
 		printErrorToConsole("wrong command format. echo command")
 		return
@@ -174,20 +193,31 @@ func handleEcho(args []string) {
 	var output []string
 
 	restOfTheCommand := args[2:]
-
 	emptySpace := " "
+	breakLoop := false
+
 	for _, val := range restOfTheCommand {
-		if val == "" {
+		switch {
+		case slices.Contains(ignoredStrings, val):
+			breakLoop = true
+		case val == "":
 			continue
-		} else if strings.TrimSpace(val) == "" {
+		case strings.TrimSpace(val) == "":
 			output = append(output, emptySpace)
-		} else {
+		default:
 			output = append(output, val)
+		}
+
+		if breakLoop {
+			break
 		}
 	}
 
-	printToConsole(
+	noSpaceArgs := deleteSpaceArgs(args)
+
+	outputSuccess(
 		fmt.Sprintf("%s\n", strings.Join(output, "")),
+		noSpaceArgs,
 	)
 
 }
@@ -293,30 +323,36 @@ func SplitArgs(input string) (output []string) {
 func handleDefault(args []string) {
 	command := strings.TrimSpace(args[0])
 	processArgs := processArgsForDefaultFunc(args[1:])
+	emptySpaceArgs := deleteSpaceArgs(args)
 
+	var stdout, stderr bytes.Buffer
 	_, err := exec.LookPath(command)
 	if err == nil {
 
 		cmd := exec.Command(command, processArgs...)
 
-		output, err := cmd.Output()
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+
+		err := cmd.Run()
 		if err != nil {
 			printErrorToConsole(
-				fmt.Sprintf("Cannot execute command: |%v| with error: |%v|\n", cmd.String(), err),
+				stderr.String(),
 			)
 		}
 
-		printToConsole(
-			fmt.Sprintf("%s", output),
+		outputSuccess(
+			stdout.String(),
+			emptySpaceArgs,
 		)
 	} else {
-		printToConsole(
+		printErrorToConsole(
 			fmt.Sprintf("%s: not found\n", command),
 		)
 	}
 }
 
-func deleteSpace(input []string) (output []string) {
+func deleteSpaceArgs(input []string) (output []string) {
 	for _, val := range input {
 		if strings.TrimSpace(val) != "" {
 			output = append(output, val)
@@ -328,8 +364,14 @@ func deleteSpace(input []string) (output []string) {
 
 func processArgsForDefaultFunc(rawArgs []string) (output []string) {
 	var buffer strings.Builder
+
+	ignoredStrings := []string{">", "1>"}
 	for _, val := range rawArgs {
 		isEmtpySpace := strings.TrimSpace(val) == ""
+
+		if slices.Contains(ignoredStrings, val) {
+			break
+		}
 
 		if !isEmtpySpace {
 			buffer.WriteString(val)
@@ -354,13 +396,78 @@ func debug(input any) {
 	fmt.Printf("DEBUGGING: |%#v|\n", input)
 }
 
-func printToConsole(input string) {
+func outputText(input string) {
 	_, err := fmt.Fprintf(os.Stdout, "%s", input)
 
 	if err != nil {
 		str := fmt.Sprintf("Error while printing value to the console: %s", err)
 		panic(str)
 	}
+
+}
+
+func outputSuccess(successOutput string, noSpaceArgs []string) {
+
+	filePath, err := findRedirectStdout(noSpaceArgs)
+	if err != nil {
+		printErrorToConsole(err.Error())
+		return
+	}
+	// debug(filePath)
+	// debug(successOutput)
+
+	if filePath == "" {
+		_, err := fmt.Fprintf(os.Stdout, "%s", successOutput)
+
+		if err != nil {
+			str := fmt.Sprintf("Error while printing value to the console: %s", err)
+			panic(str)
+		}
+
+		return
+	}
+
+	joinedPath, err := joinPath(filePath)
+	if err != nil {
+		printErrorToConsole(
+			fmt.Sprintf("Cannot join path: %v", err),
+		)
+		return
+	}
+
+	file, err := os.Create(joinedPath)
+	if err != nil {
+		printErrorToConsole(
+			fmt.Sprintf("Cannot create file: %v", err),
+		)
+		return
+	}
+
+	defer file.Close()
+
+	_, err = file.WriteString(successOutput)
+	if err != nil {
+		printErrorToConsole(
+			fmt.Sprintf("Unable to write content to file: %v", err),
+		)
+	}
+
+}
+
+func joinPath(filePath string) (joinedPath string, err error) {
+
+	if filepath.IsAbs(filePath) {
+		joinedPath = filepath.Join(filePath)
+	} else {
+		currentDirectory, err := filepath.Abs("./")
+		if err != nil {
+			return "", err
+		}
+
+		joinedPath = filepath.Join(currentDirectory, filePath)
+	}
+
+	return joinedPath, nil
 
 }
 
