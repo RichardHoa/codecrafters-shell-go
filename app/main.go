@@ -140,6 +140,8 @@ func handlePWD(noSpaceArgs []string) {
 
 }
 func handleType(noSpaceArgs []string) {
+	defer outputError("", noSpaceArgs)
+
 	toolName := noSpaceArgs[1]
 	validTools := []string{"type", "exit", "echo", "pwd"}
 
