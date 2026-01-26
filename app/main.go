@@ -89,24 +89,7 @@ func handleCD(noSpaceArgs []string) {
 	}
 
 	_, err := os.Stat(path)
-	if err == nil {
-		joinedPath, err := joinPath(path)
-		if err != nil {
-			outputError(
-				fmt.Sprintf("Error while join file path: %v\n", err),
-				noSpaceArgs,
-			)
-		}
-
-		err = os.Chdir(joinedPath)
-		if err != nil {
-			outputError(
-				fmt.Sprintf("Cannot change to specified location although it exists: %v\n", err),
-				noSpaceArgs,
-			)
-		}
-
-	} else {
+	if err != nil {
 		if os.IsNotExist(err) {
 			outputError(
 				fmt.Sprintf("cd: %s: No such file or directory\n", path),
@@ -114,10 +97,28 @@ func handleCD(noSpaceArgs []string) {
 			)
 		} else {
 			outputError(
-				fmt.Sprintf("Unexpected error: %v", err),
+				fmt.Sprintf("Unexpected error when checking path status: %v", err),
 				noSpaceArgs,
 			)
 		}
+
+		return
+	}
+
+	joinedPath, err := joinPath(path)
+	if err != nil {
+		outputError(
+			fmt.Sprintf("Error while join file path: %v\n", err),
+			noSpaceArgs,
+		)
+	}
+
+	err = os.Chdir(joinedPath)
+	if err != nil {
+		outputError(
+			fmt.Sprintf("Cannot change to specified location although it exists: %v\n", err),
+			noSpaceArgs,
+		)
 	}
 
 }
