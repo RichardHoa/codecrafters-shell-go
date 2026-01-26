@@ -64,17 +64,14 @@ func main() {
 
 }
 func handleCD(noSpaceArgs []string) {
-	var path string
-	argsLength := len(noSpaceArgs)
+	defer outputSuccess("", noSpaceArgs)
 
-	switch argsLength {
-	case 1:
+	var path string
+
+	if len(noSpaceArgs) == 1 {
 		path = "~"
-	case 2:
+	} else {
 		path = noSpaceArgs[1]
-	default:
-		outputError("Too many agrument, maximum of one agrument\n", noSpaceArgs)
-		return
 	}
 
 	if path == "~" {
@@ -125,6 +122,8 @@ func handleCD(noSpaceArgs []string) {
 }
 
 func handlePWD(noSpaceArgs []string) {
+	defer outputError("", noSpaceArgs)
+
 	currentDir, err := filepath.Abs("./")
 	if err != nil {
 		outputError(
@@ -225,6 +224,7 @@ func handleDefault(args []string) {
 
 	var stdout, stderr bytes.Buffer
 
+	//NOTE: Consider doing file expansion (*.txt) here
 	cmd := exec.Command(command, cleanedArgs...)
 
 	cmd.Stdout = &stdout
@@ -296,15 +296,11 @@ func printErr(errString string) {
 }
 
 func outputError(errorOutput string, noSpaceArgs []string) {
-	// debug("ERROR")
 	filePath, err := findRedirectStderr(noSpaceArgs)
 	if err != nil {
 		printErr(err.Error())
 		return
 	}
-
-	// debug(filePath)
-	// debug(errorOutput)
 
 	if filePath == "" {
 		printErr(errorOutput)
@@ -332,16 +328,12 @@ func outputError(errorOutput string, noSpaceArgs []string) {
 }
 
 func outputSuccess(successOutput string, noSpaceArgs []string) {
-	// debug("SUCESS")
 
 	filePath, err := findRedirectStdout(noSpaceArgs)
 	if err != nil {
 		outputError(err.Error(), noSpaceArgs)
 		return
 	}
-
-	// debug(filePath)
-	// debug(successOutput)
 
 	if filePath == "" {
 		_, err := fmt.Fprintf(os.Stdout, "%s", successOutput)
