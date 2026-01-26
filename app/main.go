@@ -196,7 +196,7 @@ func handleEcho(args []string) {
 		}
 	}
 
-	outputError("", noSpaceArgs)
+	// outputError("", noSpaceArgs)
 
 	outputSuccess(
 		fmt.Sprintf("%s\n", strings.Join(output, "")),
