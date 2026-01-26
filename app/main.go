@@ -177,7 +177,6 @@ func handleEcho(args []string) {
 	var output []string
 
 	restOfTheCommand := args[2:]
-	emptySpace := " "
 	breakLoop := false
 
 	for _, val := range restOfTheCommand {
@@ -187,7 +186,7 @@ func handleEcho(args []string) {
 		case val == "":
 			continue
 		case strings.TrimSpace(val) == "":
-			output = append(output, emptySpace)
+			output = append(output, " ")
 		default:
 			output = append(output, val)
 		}
