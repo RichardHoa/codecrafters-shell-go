@@ -165,50 +165,6 @@ func handleType(noSpaceArgs []string) {
 	)
 }
 
-func findRedirectStderr(noSpaceArgs []string) (filePath string, err error) {
-	counter := 0
-
-	for index, val := range noSpaceArgs {
-		if val == "2>" {
-			counter++
-			if index == len(noSpaceArgs)-1 {
-				return "", errors.New("stderr sign but no file\n")
-			}
-
-			filePath = noSpaceArgs[index+1]
-
-		}
-	}
-
-	if counter > 1 {
-		return "", errors.New("Can only pipe to one file only\n")
-	}
-
-	return filePath, nil
-}
-
-func findRedirectStdout(noSpaceArgs []string) (filePath string, err error) {
-	counter := 0
-
-	for index, val := range noSpaceArgs {
-		if val == ">" || val == "1>" {
-			counter++
-			if index == len(noSpaceArgs)-1 {
-				return "", errors.New("Direct stdout sign but no file\n")
-			}
-
-			filePath = noSpaceArgs[index+1]
-
-		}
-	}
-
-	if counter > 1 {
-		return "", errors.New("Can only pipe to one file only\n")
-	}
-
-	return filePath, nil
-}
-
 func handleExit() {
 	os.Exit(0)
 }
@@ -524,6 +480,50 @@ func outputSuccess(successOutput string, noSpaceArgs []string) {
 		)
 	}
 
+}
+
+func findRedirectStderr(noSpaceArgs []string) (filePath string, err error) {
+	counter := 0
+
+	for index, val := range noSpaceArgs {
+		if val == "2>" {
+			counter++
+			if index == len(noSpaceArgs)-1 {
+				return "", errors.New("stderr sign but no file\n")
+			}
+
+			filePath = noSpaceArgs[index+1]
+
+		}
+	}
+
+	if counter > 1 {
+		return "", errors.New("Can only pipe to one file only\n")
+	}
+
+	return filePath, nil
+}
+
+func findRedirectStdout(noSpaceArgs []string) (filePath string, err error) {
+	counter := 0
+
+	for index, val := range noSpaceArgs {
+		if val == ">" || val == "1>" {
+			counter++
+			if index == len(noSpaceArgs)-1 {
+				return "", errors.New("Direct stdout sign but no file\n")
+			}
+
+			filePath = noSpaceArgs[index+1]
+
+		}
+	}
+
+	if counter > 1 {
+		return "", errors.New("Can only pipe to one file only\n")
+	}
+
+	return filePath, nil
 }
 
 func joinPath(filePath string) (joinedPath string, err error) {
