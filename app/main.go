@@ -217,11 +217,6 @@ func handleEcho(args []string) {
 	breakStrings := NewBreakString()
 	noSpaceArgs := deleteSpaceArgs(args)
 
-	if strings.TrimSpace(args[1]) != "" {
-		outputError("wrong command format. Format: echo[space]command", noSpaceArgs)
-		return
-	}
-
 	var output []string
 
 	restOfTheCommand := args[2:]
