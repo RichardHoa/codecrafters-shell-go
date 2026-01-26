@@ -311,46 +311,9 @@ func outputError(errorOutput string, redirectTarget redirectionTargets) {
 		return
 	}
 
-	if redirectPath != "" {
-		absPath, err := absolutePath(redirectPath)
-		if err != nil {
-			printErr(fmt.Sprintf("Cannot join path: %v", err))
-		}
+	writeToFile(redirectPath, errorOutput, false)
 
-		file, err := os.Create(absPath)
-		if err != nil {
-			printErr(fmt.Sprintf("Cannot create error file: %v", err))
-		}
-
-		defer file.Close()
-
-		_, err = file.WriteString(errorOutput)
-		if err != nil {
-			printErr(fmt.Sprintf("Unable to write content to file: %v", err))
-		}
-
-	}
-
-	if appendPath != "" {
-		absPath, err := absolutePath(appendPath)
-		if err != nil {
-			printErr(fmt.Sprintf("Cannot join path: %v", err))
-		}
-
-		file, err := os.OpenFile(absPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			printErr(fmt.Sprintf("Cannot create error file: %v", err))
-		}
-
-		defer file.Close()
-
-		_, err = file.WriteString(errorOutput)
-		if err != nil {
-			printErr(fmt.Sprintf("Unable to write content to file: %v", err))
-		}
-
-	}
-
+	writeToFile(appendPath, errorOutput, true)
 }
 
 func outputSuccess(successOutput string, redirectTarget redirectionTargets) {
@@ -362,74 +325,16 @@ func outputSuccess(successOutput string, redirectTarget redirectionTargets) {
 		_, err := fmt.Fprintf(os.Stdout, "%s", successOutput)
 
 		if err != nil {
-			str := fmt.Sprintf("Error while printing value to the console: %s", err)
+			str := fmt.Sprintf("Error while printing sucess value to the console: %s", err)
 			outputError(str, redirectTarget)
 		}
 
 		return
 	}
 
-	if redirectPath != "" {
-		absPath, err := absolutePath(redirectPath)
-		if err != nil {
-			outputError(
-				fmt.Sprintf("Cannot join path: %v", err),
-				redirectTarget,
-			)
-			return
-		}
+	writeToFile(redirectPath, successOutput, false)
 
-		file, err := os.Create(absPath)
-		if err != nil {
-			outputError(
-				fmt.Sprintf("Cannot create sucess file: %v", err),
-				redirectTarget,
-			)
-			return
-		}
-
-		defer file.Close()
-
-		_, err = file.WriteString(successOutput)
-		if err != nil {
-			outputError(
-				fmt.Sprintf("Unable to write content to file: %v", err),
-				redirectTarget,
-			)
-		}
-
-	}
-
-	if appendPath != "" {
-		absPath, err := absolutePath(appendPath)
-		if err != nil {
-			outputError(
-				fmt.Sprintf("Cannot join path: %v", err),
-				redirectTarget,
-			)
-			return
-		}
-
-		file, err := os.OpenFile(absPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			outputError(
-				fmt.Sprintf("Cannot create sucess file: %v", err),
-				redirectTarget,
-			)
-			return
-		}
-
-		defer file.Close()
-
-		_, err = file.WriteString(successOutput)
-		if err != nil {
-			outputError(
-				fmt.Sprintf("Unable to write content to file: %v", err),
-				redirectTarget,
-			)
-		}
-
-	}
+	writeToFile(appendPath, successOutput, true)
 
 }
 
@@ -579,4 +484,35 @@ func SplitArgs(input string) (output []string) {
 
 	return output
 
+}
+
+func writeToFile(path string, content string, isAppend bool) {
+	if path == "" {
+		return
+	}
+
+	absPath, err := absolutePath(path)
+	if err != nil {
+		printErr(fmt.Sprintf("Cannot resolve path: %v\n", err))
+		return
+	}
+
+	flags := os.O_WRONLY | os.O_CREATE
+	if isAppend {
+		flags |= os.O_APPEND
+	} else {
+		flags |= os.O_TRUNC
+	}
+
+	file, err := os.OpenFile(absPath, flags, 0644)
+	if err != nil {
+		printErr(fmt.Sprintf("Cannot open file: %v\n", err))
+		return
+	}
+	defer file.Close()
+
+	_, err = file.WriteString(content)
+	if err != nil {
+		printErr(fmt.Sprintf("Unable to write content: %v\n", err))
+	}
 }
