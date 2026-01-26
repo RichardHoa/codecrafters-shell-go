@@ -41,7 +41,7 @@ func main() {
 			args = args[1:]
 		}
 
-		noSpaceArgs := deleteSpaceArgs(args)
+		noSpaceArgs := filterEmptyArgs(args)
 
 		command := args[0]
 
@@ -172,7 +172,7 @@ func handleExit() {
 }
 
 func handleEcho(args []string) {
-	noSpaceArgs := deleteSpaceArgs(args)
+	noSpaceArgs := filterEmptyArgs(args)
 
 	var output []string
 
@@ -196,7 +196,11 @@ func handleEcho(args []string) {
 		}
 	}
 
-	// outputError("", noSpaceArgs)
+	/*
+		Handle stderr redirection. Even if echo doesn't fail,
+		a command like 'echo text 2> error.log' must still create 'error.log'
+	*/
+	outputError("", noSpaceArgs)
 
 	outputSuccess(
 		fmt.Sprintf("%s\n", strings.Join(output, "")),
@@ -205,138 +209,41 @@ func handleEcho(args []string) {
 
 }
 
-func SplitArgs(input string) (output []string) {
-	var buffer strings.Builder
-	var activeQuote rune
-	var isSpaceOnly bool
-	var isNextCharLiteral bool
-
-	for index, char := range input {
-
-		switch {
-
-		case isNextCharLiteral:
-			buffer.WriteRune(char)
-			isNextCharLiteral = false
-
-		case char == '\\':
-
-			switch activeQuote {
-			// we treat everything as literal inside single quote
-			case '\'':
-				buffer.WriteRune(char)
-			// inside double quote we only escape some special characters
-			case '"':
-				specialCharacters := []string{"\"", "\\"}
-
-				var nextChar string
-				if index+1 <= len(input) {
-					nextChar = string(input[index+1])
-				} else {
-					nextChar = string(char)
-				}
-
-				// if the next char is one of the special character, we escape the next char
-				if slices.Contains(specialCharacters, nextChar) {
-					isNextCharLiteral = true
-				} else {
-					buffer.WriteRune(char)
-				}
-			// if we are not inside a quote string, we escape the next char
-			case 0:
-				isNextCharLiteral = true
-			}
-
-			if buffer.Len() > 0 && isSpaceOnly {
-				output = append(output, buffer.String())
-				buffer.Reset()
-			}
-
-		// if we are inside an active quote
-		case activeQuote != 0:
-			isSpaceOnly = false
-
-			if char == activeQuote {
-				output = append(output, buffer.String())
-				buffer.Reset()
-				activeQuote = 0
-			} else {
-				buffer.WriteRune(char)
-			}
-
-		// encounter an active quote for the first time
-		case char == '"' || char == '\'':
-			if buffer.Len() > 0 {
-				output = append(output, buffer.String())
-				buffer.Reset()
-			}
-			activeQuote = char
-
-		// encounter a character
-		case !unicode.IsSpace(char):
-			if buffer.Len() > 0 && isSpaceOnly {
-				output = append(output, buffer.String())
-				buffer.Reset()
-			}
-			isSpaceOnly = false
-
-			buffer.WriteRune(char)
-
-		case unicode.IsSpace(char):
-			if buffer.Len() > 0 && !isSpaceOnly {
-				output = append(output, buffer.String())
-				buffer.Reset()
-			}
-			isSpaceOnly = true
-
-			buffer.WriteRune(char)
-		}
-
-	}
-
-	if buffer.Len() > 0 {
-		output = append(output, buffer.String())
-		buffer.Reset()
-	}
-
-	return output
-
-}
-
 func handleDefault(args []string) {
 	command := strings.TrimSpace(args[0])
-	processArgs := processArgsForDefaultFunc(args[1:])
-	noSpaceArgs := deleteSpaceArgs(args)
+	cleanedArgs := filterAndJoinArgs(args[1:])
+	noSpaceArgs := filterEmptyArgs(args)
 
-	var stdout, stderr bytes.Buffer
 	_, err := exec.LookPath(command)
-	if err == nil {
-
-		cmd := exec.Command(command, processArgs...)
-
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
-
-		_ = cmd.Run()
-
-		outputError(
-			stderr.String(),
-			noSpaceArgs,
-		)
-
-		outputSuccess(
-			stdout.String(),
-			noSpaceArgs,
-		)
-	} else {
+	if err != nil {
 		outputError(
 			fmt.Sprintf("%s: not found\n", command),
 			noSpaceArgs,
 		)
+		return
 	}
+
+	var stdout, stderr bytes.Buffer
+
+	cmd := exec.Command(command, cleanedArgs...)
+
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	_ = cmd.Run()
+
+	outputError(
+		stderr.String(),
+		noSpaceArgs,
+	)
+
+	outputSuccess(
+		stdout.String(),
+		noSpaceArgs,
+	)
 }
 
-func deleteSpaceArgs(input []string) (output []string) {
+func filterEmptyArgs(input []string) (output []string) {
 	for _, val := range input {
 		if strings.TrimSpace(val) != "" {
 			output = append(output, val)
@@ -346,7 +253,7 @@ func deleteSpaceArgs(input []string) (output []string) {
 	return output
 }
 
-func processArgsForDefaultFunc(rawArgs []string) (output []string) {
+func filterAndJoinArgs(rawArgs []string) (output []string) {
 	var buffer strings.Builder
 
 	for _, val := range rawArgs {
@@ -535,5 +442,103 @@ func joinPath(filePath string) (joinedPath string, err error) {
 	}
 
 	return joinedPath, nil
+
+}
+
+func SplitArgs(input string) (output []string) {
+	var buffer strings.Builder
+	var activeQuote rune
+	var isSpaceOnly bool
+	var isNextCharLiteral bool
+
+	for index, char := range input {
+
+		switch {
+
+		case isNextCharLiteral:
+			buffer.WriteRune(char)
+			isNextCharLiteral = false
+
+		case char == '\\':
+
+			switch activeQuote {
+			// we treat everything as literal inside single quote
+			case '\'':
+				buffer.WriteRune(char)
+			// inside double quote we only escape some special characters
+			case '"':
+				specialCharacters := []string{"\"", "\\"}
+
+				var nextChar string
+				if index+1 <= len(input) {
+					nextChar = string(input[index+1])
+				} else {
+					nextChar = string(char)
+				}
+
+				// if the next char is one of the special character, we escape the next char
+				if slices.Contains(specialCharacters, nextChar) {
+					isNextCharLiteral = true
+				} else {
+					buffer.WriteRune(char)
+				}
+			// if we are not inside a quote string, we escape the next char
+			case 0:
+				isNextCharLiteral = true
+			}
+
+			if buffer.Len() > 0 && isSpaceOnly {
+				output = append(output, buffer.String())
+				buffer.Reset()
+			}
+
+		// if we are inside an active quote
+		case activeQuote != 0:
+			isSpaceOnly = false
+
+			if char == activeQuote {
+				output = append(output, buffer.String())
+				buffer.Reset()
+				activeQuote = 0
+			} else {
+				buffer.WriteRune(char)
+			}
+
+		// encounter an active quote for the first time
+		case char == '"' || char == '\'':
+			if buffer.Len() > 0 {
+				output = append(output, buffer.String())
+				buffer.Reset()
+			}
+			activeQuote = char
+
+		// encounter a character
+		case !unicode.IsSpace(char):
+			if buffer.Len() > 0 && isSpaceOnly {
+				output = append(output, buffer.String())
+				buffer.Reset()
+			}
+			isSpaceOnly = false
+
+			buffer.WriteRune(char)
+
+		case unicode.IsSpace(char):
+			if buffer.Len() > 0 && !isSpaceOnly {
+				output = append(output, buffer.String())
+				buffer.Reset()
+			}
+			isSpaceOnly = true
+
+			buffer.WriteRune(char)
+		}
+
+	}
+
+	if buffer.Len() > 0 {
+		output = append(output, buffer.String())
+		buffer.Reset()
+	}
+
+	return output
 
 }
