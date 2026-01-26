@@ -101,7 +101,6 @@ func handleCD(noSpaceArgs []string) {
 				noSpaceArgs,
 			)
 		}
-
 		return
 	}
 
@@ -124,16 +123,17 @@ func handleCD(noSpaceArgs []string) {
 }
 
 func handlePWD(noSpaceArgs []string) {
-	dir, err := filepath.Abs("./")
+	currentDir, err := filepath.Abs("./")
 	if err != nil {
 		outputError(
-			fmt.Sprintf("Cannot check current directory path: %v", err),
+			fmt.Sprintf("Cannot find current directory path: %v", err),
 			noSpaceArgs,
 		)
+		return
 	}
 
 	outputSuccess(
-		fmt.Sprintln(dir),
+		fmt.Sprintln(currentDir),
 		noSpaceArgs,
 	)
 
