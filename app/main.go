@@ -13,6 +13,8 @@ import (
 	"unicode"
 )
 
+var redirectionsOperators = []string{">", "1>", "2>"}
+
 func main() {
 
 	for {
@@ -170,7 +172,6 @@ func handleExit() {
 }
 
 func handleEcho(args []string) {
-	breakStrings := NewBreakString()
 	noSpaceArgs := deleteSpaceArgs(args)
 
 	var output []string
@@ -181,7 +182,7 @@ func handleEcho(args []string) {
 
 	for _, val := range restOfTheCommand {
 		switch {
-		case slices.Contains(breakStrings, val):
+		case slices.Contains(redirectionsOperators, val):
 			breakLoop = true
 		case val == "":
 			continue
@@ -349,11 +350,10 @@ func deleteSpaceArgs(input []string) (output []string) {
 func processArgsForDefaultFunc(rawArgs []string) (output []string) {
 	var buffer strings.Builder
 
-	ignoredStrings := NewBreakString()
 	for _, val := range rawArgs {
 		isEmtpySpace := strings.TrimSpace(val) == ""
 
-		if slices.Contains(ignoredStrings, val) {
+		if slices.Contains(redirectionsOperators, val) {
 			break
 		}
 
@@ -374,10 +374,6 @@ func processArgsForDefaultFunc(rawArgs []string) (output []string) {
 	}
 
 	return output
-}
-
-func NewBreakString() []string {
-	return []string{">", "1>", "2>"}
 }
 
 func debug(input any) {
