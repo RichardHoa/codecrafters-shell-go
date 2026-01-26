@@ -147,22 +147,22 @@ func handleType(noSpaceArgs []string) {
 			fmt.Sprintf("%s is a shell builtin\n", toolName),
 			noSpaceArgs,
 		)
-	} else {
-		absPath, err := exec.LookPath(toolName)
-		if err == nil {
-			outputSuccess(
-				fmt.Sprintf("%s is %s\n", toolName, absPath),
-				noSpaceArgs,
-			)
-
-		} else {
-			outputError(
-				fmt.Sprintf("%s: not found\n", toolName),
-				noSpaceArgs,
-			)
-		}
+		return
 	}
 
+	toolAbsPath, err := exec.LookPath(toolName)
+	if err != nil {
+		outputError(
+			fmt.Sprintf("%s: not found\n", toolName),
+			noSpaceArgs,
+		)
+		return
+	}
+
+	outputSuccess(
+		fmt.Sprintf("%s is %s\n", toolName, toolAbsPath),
+		noSpaceArgs,
+	)
 }
 
 func findRedirectStderr(noSpaceArgs []string) (filePath string, err error) {
