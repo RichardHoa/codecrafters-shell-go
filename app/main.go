@@ -64,7 +64,9 @@ func main() {
 
 }
 func handleCD(noSpaceArgs []string) {
-	defer outputSuccess("", noSpaceArgs)
+	redirectionTargets := findRedirectionTargets(noSpaceArgs)
+
+	defer outputSucessTest("", redirectionTargets)
 
 	var path string
 
@@ -79,9 +81,9 @@ func handleCD(noSpaceArgs []string) {
 
 		err := os.Chdir(homePath)
 		if err != nil {
-			outputError(
+			outputErrorTest(
 				fmt.Sprintf("Cannot change to home directory: %v", err),
-				noSpaceArgs,
+				redirectionTargets,
 			)
 		}
 		return
@@ -90,14 +92,14 @@ func handleCD(noSpaceArgs []string) {
 	_, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			outputError(
+			outputErrorTest(
 				fmt.Sprintf("cd: %s: No such file or directory\n", path),
-				noSpaceArgs,
+				redirectionTargets,
 			)
 		} else {
-			outputError(
+			outputErrorTest(
 				fmt.Sprintf("Unexpected error when checking path status: %v", err),
-				noSpaceArgs,
+				redirectionTargets,
 			)
 		}
 		return
@@ -105,66 +107,68 @@ func handleCD(noSpaceArgs []string) {
 
 	joinedPath, err := joinPath(path)
 	if err != nil {
-		outputError(
+		outputErrorTest(
 			fmt.Sprintf("Error while join file path: %v\n", err),
-			noSpaceArgs,
+			redirectionTargets,
 		)
 	}
 
 	err = os.Chdir(joinedPath)
 	if err != nil {
-		outputError(
+		outputErrorTest(
 			fmt.Sprintf("Cannot change to specified location although it exists: %v\n", err),
-			noSpaceArgs,
+			redirectionTargets,
 		)
 	}
 
 }
 
 func handlePWD(noSpaceArgs []string) {
-	defer outputError("", noSpaceArgs)
+	redirectTargets := findRedirectionTargets(noSpaceArgs)
 
 	currentDir, err := filepath.Abs("./")
 	if err != nil {
-		outputError(
+		outputErrorTest(
 			fmt.Sprintf("Cannot find current directory path: %v", err),
-			noSpaceArgs,
+			redirectTargets,
 		)
 		return
 	}
 
-	outputSuccess(
+	defer outputErrorTest("", redirectTargets)
+	outputSucessTest(
 		fmt.Sprintln(currentDir),
-		noSpaceArgs,
+		redirectTargets,
 	)
 
 }
 func handleType(noSpaceArgs []string) {
-	defer outputError("", noSpaceArgs)
+	redirectionTargets := findRedirectionTargets(noSpaceArgs)
+	defer outputErrorTest("", redirectionTargets)
 
 	toolName := noSpaceArgs[1]
 	validTools := []string{"type", "exit", "echo", "pwd"}
 
 	if slices.Contains(validTools, toolName) {
-		outputSuccess(
+		outputSucessTest(
 			fmt.Sprintf("%s is a shell builtin\n", toolName),
-			noSpaceArgs,
+			redirectionTargets,
 		)
 		return
 	}
 
 	toolAbsPath, err := exec.LookPath(toolName)
 	if err != nil {
-		outputError(
+		outputErrorTest(
 			fmt.Sprintf("%s: not found\n", toolName),
-			noSpaceArgs,
+			redirectionTargets,
 		)
 		return
 	}
 
-	outputSuccess(
+	outputSucessTest(
 		fmt.Sprintf("%s is %s\n", toolName, toolAbsPath),
-		noSpaceArgs,
+		redirectionTargets,
 	)
 }
 
@@ -174,6 +178,7 @@ func handleExit() {
 
 func handleEcho(args []string) {
 	noSpaceArgs := filterEmptyArgs(args)
+	redirectionTargets := findRedirectionTargets(noSpaceArgs)
 
 	var output []string
 
@@ -201,11 +206,11 @@ func handleEcho(args []string) {
 		Handle stderr redirection. Even if echo doesn't fail,
 		a command like 'echo text 2> error.log' must still create 'error.log'
 	*/
-	outputError("", noSpaceArgs)
+	outputErrorTest("", redirectionTargets)
 
-	outputSuccess(
+	outputSucessTest(
 		fmt.Sprintf("%s\n", strings.Join(output, "")),
-		noSpaceArgs,
+		redirectionTargets,
 	)
 
 }
@@ -214,12 +219,13 @@ func handleDefault(args []string) {
 	command := strings.TrimSpace(args[0])
 	cleanedArgs := filterAndJoinArgs(args[1:])
 	noSpaceArgs := filterEmptyArgs(args)
+	redirectionTargets := findRedirectionTargets(noSpaceArgs)
 
 	_, err := exec.LookPath(command)
 	if err != nil {
-		outputError(
+		outputErrorTest(
 			fmt.Sprintf("%s: not found\n", command),
-			noSpaceArgs,
+			redirectionTargets,
 		)
 		return
 	}
@@ -234,14 +240,14 @@ func handleDefault(args []string) {
 
 	_ = cmd.Run()
 
-	outputError(
+	outputErrorTest(
 		stderr.String(),
-		noSpaceArgs,
+		redirectionTargets,
 	)
 
-	outputSuccess(
+	outputSucessTest(
 		stdout.String(),
-		noSpaceArgs,
+		redirectionTargets,
 	)
 }
 
@@ -297,86 +303,217 @@ func printErr(errString string) {
 
 }
 
-func outputError(errorOutput string, noSpaceArgs []string) {
-	filePath, err := findRedirectStderr(noSpaceArgs)
-	if err != nil {
-		printErr(err.Error())
-		return
-	}
+// func outputError(errorOutput string, noSpaceArgs []string) {
+// 	filePath, err := findRedirectStderr(noSpaceArgs)
+// 	if err != nil {
+// 		printErr(err.Error())
+// 		return
+// 	}
+//
+// 	if filePath == "" {
+// 		printErr(errorOutput)
+//
+// 		return
+// 	}
+//
+// 	joinedPath, err := joinPath(filePath)
+// 	if err != nil {
+// 		printErr(fmt.Sprintf("Cannot join path: %v", err))
+// 	}
+//
+// 	file, err := os.Create(joinedPath)
+// 	if err != nil {
+// 		printErr(fmt.Sprintf("Cannot create error file: %v", err))
+// 	}
+//
+// 	defer file.Close()
+//
+// 	_, err = file.WriteString(errorOutput)
+// 	if err != nil {
+// 		printErr(fmt.Sprintf("Unable to write content to file: %v", err))
+// 	}
+//
+// }
 
-	if filePath == "" {
+func outputErrorTest(errorOutput string, redirectTarget redirectionTargets) {
+	redirectPath := redirectTarget.errRedirect
+	appendPath := redirectTarget.errAppend
+
+	if appendPath == "" && redirectPath == "" {
 		printErr(errorOutput)
-
 		return
 	}
 
-	joinedPath, err := joinPath(filePath)
-	if err != nil {
-		printErr(fmt.Sprintf("Cannot join path: %v", err))
+	if appendPath != "" {
+		joinedPath, err := joinPath(appendPath)
+		if err != nil {
+			printErr(fmt.Sprintf("Cannot join path: %v", err))
+		}
+
+		file, err := os.Create(joinedPath)
+		if err != nil {
+			printErr(fmt.Sprintf("Cannot create error file: %v", err))
+		}
+
+		defer file.Close()
+
+		_, err = file.WriteString(errorOutput)
+		if err != nil {
+			printErr(fmt.Sprintf("Unable to write content to file: %v", err))
+		}
+
 	}
 
-	file, err := os.Create(joinedPath)
-	if err != nil {
-		printErr(fmt.Sprintf("Cannot create error file: %v", err))
-	}
+	if redirectPath != "" {
+		joinedPath, err := joinPath(redirectPath)
+		if err != nil {
+			printErr(fmt.Sprintf("Cannot join path: %v", err))
+		}
 
-	defer file.Close()
+		file, err := os.OpenFile(joinedPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			printErr(fmt.Sprintf("Cannot create error file: %v", err))
+		}
 
-	_, err = file.WriteString(errorOutput)
-	if err != nil {
-		printErr(fmt.Sprintf("Unable to write content to file: %v", err))
+		defer file.Close()
+
+		_, err = file.WriteString(errorOutput)
+		if err != nil {
+			printErr(fmt.Sprintf("Unable to write content to file: %v", err))
+		}
+
 	}
 
 }
 
-func outputSuccess(successOutput string, noSpaceArgs []string) {
+func outputSucessTest(successOutput string, redirectTarget redirectionTargets) {
 
-	filePath, err := findRedirectStdout(noSpaceArgs)
-	if err != nil {
-		outputError(err.Error(), noSpaceArgs)
-		return
-	}
+	redirectPath := redirectTarget.outputRedirect
+	appendPath := redirectTarget.outputAppend
 
-	if filePath == "" {
+	if redirectPath == "" && appendPath == "" {
 		_, err := fmt.Fprintf(os.Stdout, "%s", successOutput)
 
 		if err != nil {
 			str := fmt.Sprintf("Error while printing value to the console: %s", err)
-			outputError(str, noSpaceArgs)
+			outputErrorTest(str, redirectTarget)
 		}
 
 		return
 	}
 
-	joinedPath, err := joinPath(filePath)
-	if err != nil {
-		outputError(
-			fmt.Sprintf("Cannot join path: %v", err),
-			noSpaceArgs,
-		)
-		return
+	if redirectPath != "" {
+		joinedPath, err := joinPath(redirectPath)
+		if err != nil {
+			outputErrorTest(
+				fmt.Sprintf("Cannot join path: %v", err),
+				redirectTarget,
+			)
+			return
+		}
+
+		file, err := os.Create(joinedPath)
+		if err != nil {
+			outputErrorTest(
+				fmt.Sprintf("Cannot create sucess file: %v", err),
+				redirectTarget,
+			)
+			return
+		}
+
+		defer file.Close()
+
+		_, err = file.WriteString(successOutput)
+		if err != nil {
+			outputErrorTest(
+				fmt.Sprintf("Unable to write content to file: %v", err),
+				redirectTarget,
+			)
+		}
+
 	}
 
-	file, err := os.Create(joinedPath)
-	if err != nil {
-		outputError(
-			fmt.Sprintf("Cannot create sucess file: %v", err),
-			noSpaceArgs,
-		)
-		return
-	}
+	if appendPath != "" {
+		joinedPath, err := joinPath(appendPath)
+		if err != nil {
+			outputErrorTest(
+				fmt.Sprintf("Cannot join path: %v", err),
+				redirectTarget,
+			)
+			return
+		}
 
-	defer file.Close()
+		file, err := os.OpenFile(joinedPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			outputErrorTest(
+				fmt.Sprintf("Cannot create sucess file: %v", err),
+				redirectTarget,
+			)
+			return
+		}
 
-	_, err = file.WriteString(successOutput)
-	if err != nil {
-		outputError(
-			fmt.Sprintf("Unable to write content to file: %v", err),
-			noSpaceArgs,
-		)
+		defer file.Close()
+
+		_, err = file.WriteString(successOutput)
+		if err != nil {
+			outputErrorTest(
+				fmt.Sprintf("Unable to write content to file: %v", err),
+				redirectTarget,
+			)
+		}
+
 	}
 
 }
+
+// func outputSuccess(successOutput string, noSpaceArgs []string) {
+//
+// 	filePath, err := findRedirectStdout(noSpaceArgs)
+// 	if err != nil {
+// 		outputError(err.Error(), noSpaceArgs)
+// 		return
+// 	}
+//
+// 	if filePath == "" {
+// 		_, err := fmt.Fprintf(os.Stdout, "%s", successOutput)
+//
+// 		if err != nil {
+// 			str := fmt.Sprintf("Error while printing value to the console: %s", err)
+// 			outputError(str, noSpaceArgs)
+// 		}
+//
+// 		return
+// 	}
+//
+// 	joinedPath, err := joinPath(filePath)
+// 	if err != nil {
+// 		outputError(
+// 			fmt.Sprintf("Cannot join path: %v", err),
+// 			noSpaceArgs,
+// 		)
+// 		return
+// 	}
+//
+// 	file, err := os.Create(joinedPath)
+// 	if err != nil {
+// 		outputError(
+// 			fmt.Sprintf("Cannot create sucess file: %v", err),
+// 			noSpaceArgs,
+// 		)
+// 		return
+// 	}
+//
+// 	defer file.Close()
+//
+// 	_, err = file.WriteString(successOutput)
+// 	if err != nil {
+// 		outputError(
+// 			fmt.Sprintf("Unable to write content to file: %v", err),
+// 			noSpaceArgs,
+// 		)
+// 	}
+//
+// }
 
 func findRedirectStderr(noSpaceArgs []string) (filePath string, err error) {
 	counter := 0
@@ -398,6 +535,37 @@ func findRedirectStderr(noSpaceArgs []string) (filePath string, err error) {
 	}
 
 	return filePath, nil
+}
+
+type redirectionTargets struct {
+	outputRedirect string
+	errRedirect    string
+	outputAppend   string
+	errAppend      string
+}
+
+func findRedirectionTargets(noSpaceArgs []string) redirectionTargets {
+	var output redirectionTargets
+	for i := 0; i < len(noSpaceArgs)-1; i++ {
+		val := noSpaceArgs[i]
+		switch val {
+		case ">":
+			fallthrough
+		case "1>":
+			output.outputRedirect = noSpaceArgs[i+1]
+		case "2>":
+			output.errRedirect = noSpaceArgs[i+1]
+		case ">>":
+			fallthrough
+		case "1>>":
+			output.outputAppend = noSpaceArgs[i+1]
+		default:
+			continue
+		}
+	}
+
+	return output
+
 }
 
 func findRedirectStdout(noSpaceArgs []string) (filePath string, err error) {
