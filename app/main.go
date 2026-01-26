@@ -12,7 +12,7 @@ import (
 	"unicode"
 )
 
-var redirectionsOperators = []string{">", "1>", ">>", "1>>", "2>"}
+var redirectionsOperators = []string{">", "1>", ">>", "1>>", "2>", "2>>"}
 
 func main() {
 
@@ -311,8 +311,8 @@ func outputError(errorOutput string, redirectTarget redirectionTargets) {
 		return
 	}
 
-	if appendPath != "" {
-		absPath, err := absolutePath(appendPath)
+	if redirectPath != "" {
+		absPath, err := absolutePath(redirectPath)
 		if err != nil {
 			printErr(fmt.Sprintf("Cannot join path: %v", err))
 		}
@@ -331,8 +331,8 @@ func outputError(errorOutput string, redirectTarget redirectionTargets) {
 
 	}
 
-	if redirectPath != "" {
-		absPath, err := absolutePath(redirectPath)
+	if appendPath != "" {
+		absPath, err := absolutePath(appendPath)
 		if err != nil {
 			printErr(fmt.Sprintf("Cannot join path: %v", err))
 		}
@@ -449,12 +449,14 @@ func findRedirectionTargets(noSpaceArgs []string) redirectionTargets {
 			fallthrough
 		case "1>":
 			output.outputRedirect = noSpaceArgs[i+1]
-		case "2>":
-			output.errRedirect = noSpaceArgs[i+1]
 		case ">>":
 			fallthrough
 		case "1>>":
 			output.outputAppend = noSpaceArgs[i+1]
+		case "2>":
+			output.errRedirect = noSpaceArgs[i+1]
+		case "2>>":
+			output.errAppend = noSpaceArgs[i+1]
 		default:
 			continue
 		}
