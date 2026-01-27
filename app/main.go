@@ -15,6 +15,7 @@ import (
 var redirectionsOperators = []string{">", "1>", ">>", "1>>", "2>", "2>>"}
 var builtinTools = []string{"type", "exit", "echo", "pwd"}
 
+
 func main() {
 
 	var items []readline.PrefixCompleterInterface
