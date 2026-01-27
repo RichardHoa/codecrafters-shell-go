@@ -15,6 +15,28 @@ import (
 var redirectionsOperators = []string{">", "1>", ">>", "1>>", "2>", "2>>"}
 var builtinTools = []string{"type", "exit", "echo", "pwd"}
 
+type BellListener struct {
+	completer *readline.PrefixCompleter
+}
+
+func (b *BellListener) OnChange(line []rune, pos int, key rune) (newLine []rune, newPos int, ok bool) {
+	if key == '\t' {
+		// 1. Get the line up to the cursor (already []rune)
+		lineSoFar := line[:pos]
+
+		// 2. Pass it directly to Do.
+		// Most versions of this library's PrefixCompleter.Do take ([]rune, int)
+		matches, _ := b.completer.Do(lineSoFar, len(lineSoFar))
+
+		// 3. If no matches found, ring the bell
+		if len(matches) == 0 {
+			fmt.Print("\x07")
+		}
+	}
+	// Return false so readline proceeds with its own tab-completion logic
+	return nil, 0, false
+}
+
 func main() {
 
 	var items []readline.PrefixCompleterInterface
@@ -27,11 +49,12 @@ func main() {
 	rl, err := readline.NewEx(&readline.Config{
 		Prompt:       "$ ",
 		AutoComplete: completer,
+		Listener:     &BellListener{completer: completer},
 	})
-
 	if err != nil {
 		panic(err)
 	}
+
 	defer rl.Close()
 
 	for {
@@ -41,12 +64,13 @@ func main() {
 			break
 		}
 
+		// goes to the next line
 		fmt.Print("\r")
 
 		args := SplitArgs(line)
 
 		if len(args) == 0 {
-			printErr("There must be a command\r\n")
+			printErr("There must be a command\n")
 			continue
 		}
 
