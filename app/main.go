@@ -1,9 +1,9 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
+	"github.com/chzyer/readline"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,23 +17,36 @@ var builtinTools = []string{"type", "exit", "echo", "pwd"}
 
 func main() {
 
+	var items []readline.PrefixCompleterInterface
+	for _, tool := range builtinTools {
+		items = append(items, readline.PcItem(tool))
+	}
+	completer := readline.NewPrefixCompleter(items...)
+
+	// 2. Initialize the Readline instance
+	rl, err := readline.NewEx(&readline.Config{
+		Prompt:       "$ ",
+		AutoComplete: completer,
+	})
+
+	if err != nil {
+		panic(err)
+	}
+	defer rl.Close()
+
 	for {
-		fmt.Print("$ ")
 
-		scanner := bufio.NewScanner(os.Stdin)
-
-		scanner.Scan()
-		err := scanner.Err()
+		line, err := rl.Readline()
 		if err != nil {
-			fmt.Printf("Fatal error: %v\n", err)
+			break
 		}
 
-		input := scanner.Text()
+		fmt.Print("\r")
 
-		args := SplitArgs(input)
+		args := SplitArgs(line)
 
 		if len(args) == 0 {
-			printErr("There must be a command\n")
+			printErr("There must be a command\r\n")
 			continue
 		}
 
@@ -43,9 +56,6 @@ func main() {
 		}
 
 		noSpaceArgs := filterEmptyArgs(args)
-		testCommand := getCommandAutoComplete(args)
-
-		debug(testCommand)
 
 		command := args[0]
 
@@ -68,29 +78,30 @@ func main() {
 
 }
 
-func getCommandAutoComplete(args []string) (command string) {
-	if len(args) == 1 {
-		return args[0]
-	}
+//	func getCommandAutoComplete(args []string) (command string) {
+//		if len(args) == 1 {
+//			return args[0]
+//		}
+//
+//		isTab := args[1] == "\t"
+//		debug(args)
+//		debug(fmt.Sprintf("isTab: %v", isTab))
+//		if !isTab {
+//			return args[0]
+//		}
+//
+//		isAutoComplete := false
+//		prefixCommand := args[0]
+//		for i := 0; i < len(builtinTools); i++ {
+//			if strings.HasPrefix(builtinTools[i], prefixCommand) {
+//				command = builtinTools[i]
+//				isAutoComplete = true
+//			}
+//		}
+//
+//		return command
+//	}
 
-	isTab := args[1] == "\t"
-	debug(args)
-	debug(fmt.Sprintf("isTab: %v", isTab))
-	if !isTab {
-		return args[0]
-	}
-
-	isAutoComplete := false
-	prefixCommand := args[0]
-	for i := 0; i < len(builtinTools); i++ {
-		if strings.HasPrefix(builtinTools[i], prefixCommand) {
-			command = builtinTools[i]
-			isAutoComplete = true
-		}
-	}
-
-	return command
-}
 func handleCD(noSpaceArgs []string) {
 	redirectionTargets := findRedirectionTargets(noSpaceArgs)
 
@@ -121,7 +132,7 @@ func handleCD(noSpaceArgs []string) {
 	if err != nil {
 		if os.IsNotExist(err) {
 			outputError(
-				fmt.Sprintf("cd: %s: No such file or directory\n", path),
+				fmt.Sprintf("cd: %s: No such file or directory\r\n", path),
 				redirectionTargets,
 			)
 		} else {
@@ -136,7 +147,7 @@ func handleCD(noSpaceArgs []string) {
 	absPath, err := absolutePath(path)
 	if err != nil {
 		outputError(
-			fmt.Sprintf("Error while join file path: %v\n", err),
+			fmt.Sprintf("Error while join file path: %v\r\n", err),
 			redirectionTargets,
 		)
 	}
@@ -144,7 +155,7 @@ func handleCD(noSpaceArgs []string) {
 	err = os.Chdir(absPath)
 	if err != nil {
 		outputError(
-			fmt.Sprintf("Cannot change to specified location although it exists: %v\n", err),
+			fmt.Sprintf("Cannot change to specified location although it exists: %v\r\n", err),
 			redirectionTargets,
 		)
 	}
@@ -175,7 +186,7 @@ func handleType(noSpaceArgs []string) {
 	defer outputError("", redirectionTargets)
 
 	if len(noSpaceArgs) <= 1 {
-		outputError("lacking agrument: type [tool]\n", redirectionTargets)
+		outputError("lacking agrument: type [tool]\r\n", redirectionTargets)
 		return
 	}
 
@@ -183,7 +194,7 @@ func handleType(noSpaceArgs []string) {
 
 	if slices.Contains(builtinTools, toolName) {
 		outputSuccess(
-			fmt.Sprintf("%s is a shell builtin\n", toolName),
+			fmt.Sprintf("%s is a shell builtin\r\n", toolName),
 			redirectionTargets,
 		)
 		return
@@ -192,14 +203,14 @@ func handleType(noSpaceArgs []string) {
 	toolAbsPath, err := exec.LookPath(toolName)
 	if err != nil {
 		outputError(
-			fmt.Sprintf("%s: not found\n", toolName),
+			fmt.Sprintf("%s: not found\r\n", toolName),
 			redirectionTargets,
 		)
 		return
 	}
 
 	outputSuccess(
-		fmt.Sprintf("%s is %s\n", toolName, toolAbsPath),
+		fmt.Sprintf("%s is %s\r\n", toolName, toolAbsPath),
 		redirectionTargets,
 	)
 }
@@ -215,7 +226,7 @@ func handleEcho(args []string) {
 	var output []string
 
 	if len(args) <= 1 {
-		outputError("Lacking agrument: echo [something to echo]\n", redirectionTargets)
+		outputError("Lacking agrument: echo [something to echo]\r\n", redirectionTargets)
 		return
 	}
 
@@ -246,7 +257,7 @@ func handleEcho(args []string) {
 	outputError("", redirectionTargets)
 
 	outputSuccess(
-		fmt.Sprintf("%s\n", strings.Join(output, "")),
+		fmt.Sprintf("%s\r\n", strings.Join(output, "")),
 		redirectionTargets,
 	)
 
@@ -261,7 +272,7 @@ func handleDefault(args []string) {
 	_, err := exec.LookPath(command)
 	if err != nil {
 		outputError(
-			fmt.Sprintf("%s: not found\n", command),
+			fmt.Sprintf("%s: not found\r\n", command),
 			redirectionTargets,
 		)
 		return
@@ -328,7 +339,7 @@ func filterAndJoinArgs(rawArgs []string) (output []string) {
 }
 
 func debug(input any) {
-	fmt.Printf("DEBUGGING: |%#v|\n", input)
+	fmt.Printf("DEBUGGING: |%#v|\r\n", input)
 }
 
 func printErr(errString string) {
@@ -392,7 +403,6 @@ func outputError(errorOutput string, redirectTarget redirectionTargets) {
 }
 
 func outputSuccess(successOutput string, redirectTarget redirectionTargets) {
-
 	redirectPath := redirectTarget.outputRedirect
 	appendPath := redirectTarget.outputAppend
 
