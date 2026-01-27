@@ -13,6 +13,7 @@ import (
 )
 
 var redirectionsOperators = []string{">", "1>", ">>", "1>>", "2>", "2>>"}
+var builtinTools = []string{"type", "exit", "echo", "pwd"}
 
 func main() {
 
@@ -36,11 +37,15 @@ func main() {
 			continue
 		}
 
+		// remove the space before the first command
 		if strings.TrimSpace(args[0]) == "" {
 			args = args[1:]
 		}
 
 		noSpaceArgs := filterEmptyArgs(args)
+		testCommand := getCommandAutoComplete(args)
+
+		debug(testCommand)
 
 		command := args[0]
 
@@ -61,6 +66,30 @@ func main() {
 
 	}
 
+}
+
+func getCommandAutoComplete(args []string) (command string) {
+	if len(args) == 1 {
+		return args[0]
+	}
+
+	isTab := args[1] == "\t"
+	debug(args)
+	debug(fmt.Sprintf("isTab: %v", isTab))
+	if !isTab {
+		return args[0]
+	}
+
+	isAutoComplete := false
+	prefixCommand := args[0]
+	for i := 0; i < len(builtinTools); i++ {
+		if strings.HasPrefix(builtinTools[i], prefixCommand) {
+			command = builtinTools[i]
+			isAutoComplete = true
+		}
+	}
+
+	return command
 }
 func handleCD(noSpaceArgs []string) {
 	redirectionTargets := findRedirectionTargets(noSpaceArgs)
@@ -145,10 +174,14 @@ func handleType(noSpaceArgs []string) {
 	redirectionTargets := findRedirectionTargets(noSpaceArgs)
 	defer outputError("", redirectionTargets)
 
-	toolName := noSpaceArgs[1]
-	validTools := []string{"type", "exit", "echo", "pwd"}
+	if len(noSpaceArgs) <= 1 {
+		outputError("lacking agrument: type [tool]\n", redirectionTargets)
+		return
+	}
 
-	if slices.Contains(validTools, toolName) {
+	toolName := noSpaceArgs[1]
+
+	if slices.Contains(builtinTools, toolName) {
 		outputSuccess(
 			fmt.Sprintf("%s is a shell builtin\n", toolName),
 			redirectionTargets,
@@ -180,6 +213,11 @@ func handleEcho(args []string) {
 	redirectionTargets := findRedirectionTargets(noSpaceArgs)
 
 	var output []string
+
+	if len(args) <= 1 {
+		outputError("Lacking agrument: echo [something to echo]\n", redirectionTargets)
+		return
+	}
 
 	restOfTheCommand := args[2:]
 	breakLoop := false
