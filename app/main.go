@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 	"unicode"
 
@@ -20,10 +21,14 @@ func main() {
 
 	completer := NewCommandCompleter()
 
+	statefulComplter := CustomCompleter{
+		inner: completer,
+	}
+
 	rl, err := readline.NewEx(&readline.Config{
 		Prompt:       "$ ",
-		AutoComplete: completer,
-		Listener:     &BellListener{completer: completer},
+		AutoComplete: &statefulComplter,
+		Listener:     &BellListener{completer: &statefulComplter},
 	})
 
 	if err != nil {
@@ -75,30 +80,6 @@ func main() {
 	}
 
 }
-
-//	func getCommandAutoComplete(args []string) (command string) {
-//		if len(args) == 1 {
-//			return args[0]
-//		}
-//
-//		isTab := args[1] == "\t"
-//		debug(args)
-//		debug(fmt.Sprintf("isTab: %v", isTab))
-//		if !isTab {
-//			return args[0]
-//		}
-//
-//		isAutoComplete := false
-//		prefixCommand := args[0]
-//		for i := 0; i < len(builtinTools); i++ {
-//			if strings.HasPrefix(builtinTools[i], prefixCommand) {
-//				command = builtinTools[i]
-//				isAutoComplete = true
-//			}
-//		}
-//
-//		return command
-//	}
 
 func handleCD(noSpaceArgs []string) {
 	redirectionTargets := findRedirectionTargets(noSpaceArgs)
@@ -563,8 +544,54 @@ func writeToFile(path string, content string, isAppend bool) {
 	}
 }
 
+type CustomCompleter struct {
+	inner    *readline.PrefixCompleter
+	tabCount int
+}
+
+func (c *CustomCompleter) Do(line []rune, pos int) (newLine [][]rune, length int) {
+	matches, length := c.inner.Do(line, pos)
+
+	if len(matches) == 0 {
+		fmt.Print("\x07")
+		c.tabCount = 0
+		return nil, 0
+	}
+
+	if len(matches) == 1 {
+		c.tabCount = 0
+		fullCompletion := string(matches[0])
+		return [][]rune{[]rune(fullCompletion)}, length
+	}
+
+	if len(matches) > 1 {
+		c.tabCount++
+
+		if c.tabCount == 1 {
+			fmt.Print("\x07")
+			return nil, 0
+		}
+
+		prefix := string(line[:pos])
+		var suggestions []string
+		for _, m := range matches {
+			suggestions = append(suggestions, prefix+string(m))
+		}
+
+		sort.Strings(suggestions)
+
+		fmt.Printf("\n%s\n", strings.Join(suggestions, " "))
+		fmt.Printf("$ %s", string(line))
+
+		c.tabCount = 0
+		return nil, 0
+	}
+
+	return nil, 0
+}
+
 type BellListener struct {
-	completer *readline.PrefixCompleter
+	completer *CustomCompleter
 }
 
 func (b *BellListener) OnChange(line []rune, pos int, key rune) (newLine []rune, newPos int, ok bool) {
@@ -576,12 +603,18 @@ func (b *BellListener) OnChange(line []rune, pos int, key rune) (newLine []rune,
 		if len(matches) == 0 {
 			fmt.Print("\x07")
 		}
+	} else {
+		b.completer.tabCount = 0
 	}
 	return nil, 0, false
 }
 
 func NewCommandCompleter() (completer *readline.PrefixCompleter) {
 	commandSet := make(map[string]struct{})
+
+	for _, tool := range builtinTools {
+		commandSet[tool] = struct{}{}
+	}
 
 	pathEnv := os.Getenv("PATH")
 	paths := filepath.SplitList(pathEnv)
@@ -610,10 +643,6 @@ func NewCommandCompleter() (completer *readline.PrefixCompleter) {
 	var items []readline.PrefixCompleterInterface
 	for command := range commandSet {
 		items = append(items, readline.PcItem(command))
-	}
-
-	for _, tool := range builtinTools {
-		items = append(items, readline.PcItem(tool))
 	}
 
 	completer = readline.NewPrefixCompleter(items...)
