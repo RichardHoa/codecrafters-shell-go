@@ -544,6 +544,28 @@ func writeToFile(path string, content string, isAppend bool) {
 	}
 }
 
+func findLCP(matches [][]rune) []rune {
+	if len(matches) == 0 {
+		return nil
+	}
+
+	// Start with the first match as the potential LCP
+	prefix := matches[0]
+	for i := 1; i < len(matches); i++ {
+		j := 0
+		// Compare current prefix with the next match
+		for j < len(prefix) && j < len(matches[i]) && prefix[j] == matches[i][j] {
+			j++
+		}
+		// Shorten prefix to the matched length
+		prefix = prefix[:j]
+		if len(prefix) == 0 {
+			break
+		}
+	}
+	return prefix
+}
+
 type CustomCompleter struct {
 	inner    *readline.PrefixCompleter
 	tabCount int
@@ -560,18 +582,25 @@ func (c *CustomCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 
 	if len(matches) == 1 {
 		c.tabCount = 0
-		fullCompletion := string(matches[0])
-		return [][]rune{[]rune(fullCompletion)}, length
+		return [][]rune{matches[0]}, length
+	}
+
+	lcp := findLCP(matches)
+
+	if len(lcp) > 0 {
+		c.tabCount = 0
+		return [][]rune{lcp}, length
 	}
 
 	if len(matches) > 1 {
 		c.tabCount++
 
 		if c.tabCount == 1 {
-			fmt.Print("\x07")
+			fmt.Print("\x07") // First tab: just a bell
 			return nil, 0
 		}
 
+		// Second tab: show all suggestions
 		prefix := string(line[:pos])
 		var suggestions []string
 		for _, m := range matches {
