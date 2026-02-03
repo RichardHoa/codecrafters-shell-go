@@ -3,58 +3,32 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"github.com/chzyer/readline"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"unicode"
+
+	"github.com/chzyer/readline"
 )
 
 var redirectionsOperators = []string{">", "1>", ">>", "1>>", "2>", "2>>"}
 var builtinTools = []string{"type", "exit", "echo", "pwd"}
 
-type BellListener struct {
-	completer *readline.PrefixCompleter
-}
-
-func (b *BellListener) OnChange(line []rune, pos int, key rune) (newLine []rune, newPos int, ok bool) {
-	if key == '\t' {
-		// 1. Get the line up to the cursor (already []rune)
-		lineSoFar := line[:pos]
-
-		// 2. Pass it directly to Do.
-		// Most versions of this library's PrefixCompleter.Do take ([]rune, int)
-		matches, _ := b.completer.Do(lineSoFar, len(lineSoFar))
-
-		// 3. If no matches found, ring the bell
-		if len(matches) == 0 {
-			fmt.Print("\x07")
-		}
-	}
-	// Return false so readline proceeds with its own tab-completion logic
-	return nil, 0, false
-}
-
 func main() {
 
-	var items []readline.PrefixCompleterInterface
-	for _, tool := range builtinTools {
-		items = append(items, readline.PcItem(tool))
-	}
-	completer := readline.NewPrefixCompleter(items...)
+	completer := NewCommandCompleter()
 
-	// 2. Initialize the Readline instance
 	rl, err := readline.NewEx(&readline.Config{
 		Prompt:       "$ ",
 		AutoComplete: completer,
 		Listener:     &BellListener{completer: completer},
 	})
+
 	if err != nil {
 		panic(err)
 	}
-
 	defer rl.Close()
 
 	for {
@@ -587,4 +561,63 @@ func writeToFile(path string, content string, isAppend bool) {
 	if err != nil {
 		printErr(fmt.Sprintf("Unable to write content: %v\n", err))
 	}
+}
+
+type BellListener struct {
+	completer *readline.PrefixCompleter
+}
+
+func (b *BellListener) OnChange(line []rune, pos int, key rune) (newLine []rune, newPos int, ok bool) {
+	if key == '\t' {
+		lineSoFar := line[:pos]
+
+		matches, _ := b.completer.Do(lineSoFar, len(lineSoFar))
+
+		if len(matches) == 0 {
+			fmt.Print("\x07")
+		}
+	}
+	return nil, 0, false
+}
+
+func NewCommandCompleter() (completer *readline.PrefixCompleter) {
+	commandSet := make(map[string]struct{})
+
+	pathEnv := os.Getenv("PATH")
+	paths := filepath.SplitList(pathEnv)
+
+	for _, path := range paths {
+		dir, err := os.ReadDir(path)
+		if err != nil {
+			continue
+		}
+
+		for _, file := range dir {
+			if file.IsDir() {
+				continue
+			}
+
+			_, err := exec.LookPath(file.Name())
+			if err != nil {
+				continue
+			}
+
+			commandSet[file.Name()] = struct{}{}
+
+		}
+	}
+
+	var items []readline.PrefixCompleterInterface
+	for command := range commandSet {
+		items = append(items, readline.PcItem(command))
+	}
+
+	for _, tool := range builtinTools {
+		items = append(items, readline.PcItem(tool))
+	}
+
+	completer = readline.NewPrefixCompleter(items...)
+
+	return completer
+
 }
