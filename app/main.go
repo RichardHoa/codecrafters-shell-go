@@ -548,22 +548,22 @@ func findLCP(matches [][]rune) []rune {
 	if len(matches) == 0 {
 		return nil
 	}
+	// we assume the first word is the LCP (Longest Common Prefix)
+	firstWord := matches[0]
 
-	// Start with the first match as the potential LCP
-	prefix := matches[0]
-	for i := 1; i < len(matches); i++ {
-		j := 0
-		// Compare current prefix with the next match
-		for j < len(prefix) && j < len(matches[i]) && prefix[j] == matches[i][j] {
-			j++
-		}
-		// Shorten prefix to the matched length
-		prefix = prefix[:j]
-		if len(prefix) == 0 {
-			break
+	// loop through every char of the first word
+	for i, charToMatch := range firstWord {
+		// check for other matches to see if their ith char matches the ith char of the first word
+		for j := 1; j < len(matches); j++ {
+
+			// if not, then we know the LCP stop here
+			if i >= len(matches[j]) || matches[j][i] != charToMatch {
+				return firstWord[:i]
+			}
 		}
 	}
-	return prefix
+
+	return firstWord
 }
 
 type CustomCompleter struct {
@@ -596,11 +596,10 @@ func (c *CustomCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 		c.tabCount++
 
 		if c.tabCount == 1 {
-			fmt.Print("\x07") // First tab: just a bell
+			fmt.Print("\x07")
 			return nil, 0
 		}
 
-		// Second tab: show all suggestions
 		prefix := string(line[:pos])
 		var suggestions []string
 		for _, m := range matches {
