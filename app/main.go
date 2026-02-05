@@ -96,29 +96,44 @@ func handlePipe(args []string, pipeIndex int) {
 	secondCommandSection := args[pipeIndex+1:]
 
 	firstCommand := firstCommandSection[0]
-	_, err := exec.LookPath(firstCommand)
-	if err != nil {
-		outputStream(
-			strings.NewReader(fmt.Sprintf("%s: not found\r\n", firstCommand)),
-			redirectionTargets,
-			true,
-		)
-		return
-	}
+	// _, err := exec.LookPath(firstCommand)
+	// if err != nil {
+	// 	outputStream(
+	// 		strings.NewReader(fmt.Sprintf("%s: not found\r\n", firstCommand)),
+	// 		redirectionTargets,
+	// 		true,
+	// 	)
+	// 	return
+	// }
 
 	if (strings.TrimSpace(secondCommandSection[0])) == "" {
 		secondCommandSection = secondCommandSection[1:]
 	}
 
 	secondCommand := secondCommandSection[0]
-	_, err = exec.LookPath(secondCommand)
-	if err != nil {
-		outputStream(
-			strings.NewReader(fmt.Sprintf("%s: not found\r\n", firstCommand)),
-			redirectionTargets,
-			true,
-		)
-		return
+
+	if slices.Contains(builtinTools, secondCommand) {
+		noSpaceArgs = filterEmptyArgs(secondCommandSection)
+		switch secondCommand {
+		case "type":
+			handleType(noSpaceArgs)
+		case "exit":
+			handleExit()
+		case "echo":
+			handleEcho(args)
+		default:
+			handleDefault(args)
+		}
+	} else {
+		_, err := exec.LookPath(secondCommand)
+		if err != nil {
+			outputStream(
+				strings.NewReader(fmt.Sprintf("%s: not found right here\n", secondCommand)),
+				redirectionTargets,
+				true,
+			)
+			return
+		}
 	}
 
 	firstCommandArgs := filterAndJoinArgs(firstCommandSection[1:])
@@ -328,7 +343,7 @@ func handleEcho(args []string) {
 	}
 
 	outputStream(
-		strings.NewReader(fmt.Sprintf("%s\r\n", strings.Join(output, ""))),
+		strings.NewReader(fmt.Sprintf("%s\n", strings.Join(output, ""))),
 		redirectionTargets,
 		false,
 	)
@@ -617,13 +632,37 @@ func SplitArgs(input string) (output []string) {
 	var activeQuote rune
 	var isSpaceOnly bool
 	var isNextCharLiteral bool
+	var isSkip bool
 
 	for index, char := range input {
 
 		switch {
 
+		case isSkip:
+			isSkip = false
+			continue
+
 		case isNextCharLiteral:
-			buffer.WriteRune(char)
+			isSkip = true
+
+			var nextChar rune
+			if index+1 <= len(input)-1 {
+				nextChar = rune(input[index+1])
+			} else {
+				nextChar = char
+			}
+
+			switch nextChar {
+			case 'n':
+				buffer.WriteRune('\n')
+			case 't':
+				buffer.WriteRune('\t')
+			case 'r':
+				buffer.WriteRune('\r')
+			default:
+				buffer.WriteRune(char)
+				isSkip = false
+			}
 			isNextCharLiteral = false
 
 		case char == '\\':
