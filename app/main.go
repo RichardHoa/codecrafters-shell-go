@@ -1,14 +1,15 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"unicode"
 
 	"github.com/chzyer/readline"
@@ -62,6 +63,12 @@ func main() {
 
 		command := args[0]
 
+		pipeIndex := slices.Index(args, "|")
+		if pipeIndex != -1 {
+			handlePipe(args, pipeIndex)
+			continue
+		}
+
 		switch command {
 		case "cd":
 			handleCD(noSpaceArgs)
@@ -80,11 +87,84 @@ func main() {
 	}
 
 }
+func handlePipe(args []string, pipeIndex int) {
+	noSpaceArgs := filterEmptyArgs(args)
+	redirectionTargets := findRedirectionTargets(noSpaceArgs)
+	initializeRedirections(redirectionTargets)
+
+	firstCommandSection := args[:pipeIndex]
+	secondCommandSection := args[pipeIndex+1:]
+
+	firstCommand := firstCommandSection[0]
+	_, err := exec.LookPath(firstCommand)
+	if err != nil {
+		outputStream(
+			strings.NewReader(fmt.Sprintf("%s: not found\r\n", firstCommand)),
+			redirectionTargets,
+			true,
+		)
+		return
+	}
+
+	if (strings.TrimSpace(secondCommandSection[0])) == "" {
+		secondCommandSection = secondCommandSection[1:]
+	}
+
+	secondCommand := secondCommandSection[0]
+	_, err = exec.LookPath(secondCommand)
+	if err != nil {
+		outputStream(
+			strings.NewReader(fmt.Sprintf("%s: not found\r\n", firstCommand)),
+			redirectionTargets,
+			true,
+		)
+		return
+	}
+
+	firstCommandArgs := filterAndJoinArgs(firstCommandSection[1:])
+	secondCommandArgs := filterAndJoinArgs(secondCommandSection[1:])
+
+	firstCmd := exec.Command(firstCommand, firstCommandArgs...)
+	secondCmd := exec.Command(secondCommand, secondCommandArgs...)
+
+	pipe, _ := firstCmd.StdoutPipe()
+	secondCmd.Stdin = pipe
+	secondCmd.Stderr = os.Stderr
+	secondCmd.Stdout = os.Stdout
+
+	// Capture second command output
+	// secondStdout, _ := secondCmd.StdoutPipe()
+	// secondStderr, _ := secondCmd.StderrPipe()
+
+	// Start both
+	firstCmd.Start()
+	secondCmd.Start()
+
+	// var wg sync.WaitGroup
+	// wg.Add(3)
+	//
+	// go func() {
+	// 	defer wg.Done()
+	// 	outputStream(firstStderr, redirectionTargets, true)
+	// }()
+	// go func() {
+	// 	defer wg.Done()
+	// 	outputStream(secondStdout, redirectionTargets, false)
+	// }()
+	// go func() {
+	// 	defer wg.Done()
+	// 	outputStream(secondStderr, redirectionTargets, true)
+	// }()
+
+	// wg.Wait()
+	firstCmd.Wait()
+	secondCmd.Wait()
+
+}
 
 func handleCD(noSpaceArgs []string) {
 	redirectionTargets := findRedirectionTargets(noSpaceArgs)
-
-	defer outputSuccess("", redirectionTargets)
+	initializeRedirections(redirectionTargets)
 
 	var path string
 
@@ -99,9 +179,10 @@ func handleCD(noSpaceArgs []string) {
 
 		err := os.Chdir(homePath)
 		if err != nil {
-			outputError(
-				fmt.Sprintf("Cannot change to home directory: %v", err),
+			outputStream(
+				strings.NewReader(fmt.Sprintf("Cannot change to home directory: %v", err)),
 				redirectionTargets,
+				true,
 			)
 		}
 		return
@@ -110,14 +191,16 @@ func handleCD(noSpaceArgs []string) {
 	_, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			outputError(
-				fmt.Sprintf("cd: %s: No such file or directory\r\n", path),
+			outputStream(
+				strings.NewReader(fmt.Sprintf("cd: %s: No such file or directory\r\n", path)),
 				redirectionTargets,
+				true,
 			)
 		} else {
-			outputError(
-				fmt.Sprintf("Unexpected error when checking path status: %v", err),
+			outputStream(
+				strings.NewReader(fmt.Sprintf("Unexpected error when checking path status: %v", err)),
 				redirectionTargets,
+				true,
 			)
 		}
 		return
@@ -125,72 +208,82 @@ func handleCD(noSpaceArgs []string) {
 
 	absPath, err := absolutePath(path)
 	if err != nil {
-		outputError(
-			fmt.Sprintf("Error while join file path: %v\r\n", err),
+		outputStream(
+			strings.NewReader(fmt.Sprintf("Error while join file path: %v\r\n", err)),
 			redirectionTargets,
+			true,
 		)
 	}
 
 	err = os.Chdir(absPath)
 	if err != nil {
-		outputError(
-			fmt.Sprintf("Cannot change to specified location although it exists: %v\r\n", err),
+		outputStream(
+			strings.NewReader(fmt.Sprintf("Cannot change to specified location although it exists: %v\r\n", err)),
 			redirectionTargets,
+			true,
 		)
 	}
-
 }
 
 func handlePWD(noSpaceArgs []string) {
 	redirectTargets := findRedirectionTargets(noSpaceArgs)
+	initializeRedirections(redirectTargets)
 
 	currentDir, err := filepath.Abs("./")
 	if err != nil {
-		outputError(
-			fmt.Sprintf("Cannot find current directory path: %v", err),
+		outputStream(
+			strings.NewReader(fmt.Sprintf("Cannot find current directory path: %v", err)),
 			redirectTargets,
+			true,
 		)
 		return
 	}
 
-	defer outputError("", redirectTargets)
-	outputSuccess(
-		fmt.Sprintln(currentDir),
+	outputStream(
+		strings.NewReader(fmt.Sprintln(currentDir)),
 		redirectTargets,
+		false,
 	)
 
 }
 func handleType(noSpaceArgs []string) {
 	redirectionTargets := findRedirectionTargets(noSpaceArgs)
-	defer outputError("", redirectionTargets)
+	initializeRedirections(redirectionTargets)
 
 	if len(noSpaceArgs) <= 1 {
-		outputError("lacking agrument: type [tool]\r\n", redirectionTargets)
+		outputStream(
+			strings.NewReader("lacking agrument: type [tool]\n"),
+			redirectionTargets,
+			true,
+		)
 		return
 	}
 
 	toolName := noSpaceArgs[1]
 
 	if slices.Contains(builtinTools, toolName) {
-		outputSuccess(
-			fmt.Sprintf("%s is a shell builtin\r\n", toolName),
+		outputStream(
+			strings.NewReader(fmt.Sprintf("%s is a shell builtin\r\n", toolName)),
 			redirectionTargets,
+			false,
 		)
 		return
 	}
 
 	toolAbsPath, err := exec.LookPath(toolName)
 	if err != nil {
-		outputError(
-			fmt.Sprintf("%s: not found\r\n", toolName),
+		outputStream(
+			strings.NewReader(fmt.Sprintf("%s: not found\r\n", toolName)),
 			redirectionTargets,
+			true,
 		)
 		return
 	}
 
-	outputSuccess(
-		fmt.Sprintf("%s is %s\r\n", toolName, toolAbsPath),
+	outputStream(
+		strings.NewReader(fmt.Sprintf("%s is %s\r\n", toolName, toolAbsPath)),
 		redirectionTargets,
+		false,
 	)
 }
 
@@ -201,11 +294,16 @@ func handleExit() {
 func handleEcho(args []string) {
 	noSpaceArgs := filterEmptyArgs(args)
 	redirectionTargets := findRedirectionTargets(noSpaceArgs)
+	initializeRedirections(redirectionTargets)
 
 	var output []string
 
 	if len(args) <= 1 {
-		outputError("Lacking agrument: echo [something to echo]\r\n", redirectionTargets)
+		outputStream(
+			strings.NewReader("Lacking agrument: echo [something to echo]\n"),
+			redirectionTargets,
+			true,
+		)
 		return
 	}
 
@@ -229,15 +327,10 @@ func handleEcho(args []string) {
 		}
 	}
 
-	/*
-		Handle stderr redirection. Even if echo doesn't fail,
-		a command like 'echo text 2> error.log' must still create 'error.log'
-	*/
-	outputError("", redirectionTargets)
-
-	outputSuccess(
-		fmt.Sprintf("%s\r\n", strings.Join(output, "")),
+	outputStream(
+		strings.NewReader(fmt.Sprintf("%s\r\n", strings.Join(output, ""))),
 		redirectionTargets,
+		false,
 	)
 
 }
@@ -245,37 +338,141 @@ func handleEcho(args []string) {
 func handleDefault(args []string) {
 	command := strings.TrimSpace(args[0])
 	cleanedArgs := filterAndJoinArgs(args[1:])
+
 	noSpaceArgs := filterEmptyArgs(args)
 	redirectionTargets := findRedirectionTargets(noSpaceArgs)
 
+	initializeRedirections(redirectionTargets)
+
 	_, err := exec.LookPath(command)
 	if err != nil {
-		outputError(
-			fmt.Sprintf("%s: not found\r\n", command),
+		outputStream(
+			strings.NewReader(fmt.Sprintf("%s: not found\n", command)),
 			redirectionTargets,
+			true,
 		)
 		return
 	}
 
-	var stdout, stderr bytes.Buffer
-
-	//NOTE: Consider doing file expansion (*.txt) here
 	cmd := exec.Command(command, cleanedArgs...)
 
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	outPipe, _ := cmd.StdoutPipe()
+	errPipe, _ := cmd.StderrPipe()
 
-	_ = cmd.Run()
+	defer func() {
+		outPipe.Close()
+		errPipe.Close()
+	}()
 
-	outputError(
-		stderr.String(),
-		redirectionTargets,
-	)
+	_ = cmd.Start()
 
-	outputSuccess(
-		stdout.String(),
-		redirectionTargets,
-	)
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		outputStream(outPipe, redirectionTargets, false)
+	}()
+
+	go func() {
+		defer wg.Done()
+		outputStream(errPipe, redirectionTargets, true)
+	}()
+
+	wg.Wait()
+
+	_ = cmd.Wait()
+
+}
+
+func outputStream(src io.Reader, targets redirectionTargets, isError bool) {
+	var fallback io.Writer
+	var appendPath, redirectPath string
+
+	if isError {
+		fallback = os.Stderr
+		appendPath = targets.errAppend
+		redirectPath = targets.errRedirect
+	} else {
+		fallback = os.Stdout
+		appendPath = targets.outputAppend
+		redirectPath = targets.outputRedirect
+	}
+
+	writers, closers, err := getWriters(redirectPath, appendPath, fallback)
+	if err != nil {
+		printErr(fmt.Sprintf("Output error: %v\n", err))
+		return
+	}
+	// Ensure every file we opened gets closed
+	defer func() {
+		for _, closeFn := range closers {
+			closeFn()
+		}
+	}()
+
+	// Bundle all writers into one "super writer"
+	multiDest := io.MultiWriter(writers...)
+
+	// Stream the data to EVERY destination at the same time
+	io.Copy(multiDest, src)
+}
+
+func getWriters(redirectPath string, appendPath string, fallback io.Writer) ([]io.Writer, []func(), error) {
+	var writers []io.Writer
+	var closers []func()
+
+	// 1. Check for Truncated Redirection (>)
+	if redirectPath != "" {
+		f, err := os.OpenFile(redirectPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+		if err != nil {
+			return nil, nil, err
+		}
+		writers = append(writers, f)
+		closers = append(closers, func() { f.Close() })
+	}
+
+	// 2. Check for Append Redirection (>>)
+	// Note: Per your logic, we allow both!
+	if appendPath != "" {
+		f, err := os.OpenFile(appendPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+		if err != nil {
+			// Clean up already opened files if this one fails
+			for _, c := range closers {
+				c()
+			}
+			return nil, nil, err
+		}
+		writers = append(writers, f)
+		closers = append(closers, func() { f.Close() })
+	}
+
+	// 3. If no files were opened, use the fallback (Stdout/Stderr)
+	if len(writers) == 0 {
+		writers = append(writers, fallback)
+	}
+
+	return writers, closers, nil
+}
+
+func initializeRedirections(input redirectionTargets) {
+
+	if input.errAppend != "" {
+		writeToFile(input.errAppend, "", true)
+	}
+
+	if input.errRedirect != "" {
+		writeToFile(input.errRedirect, "", false)
+	}
+
+	if input.outputAppend != "" {
+		writeToFile(input.outputAppend, "", true)
+	}
+
+	if input.outputRedirect != "" {
+		writeToFile(input.outputRedirect, "", false)
+	}
+
 }
 
 func filterEmptyArgs(input []string) (output []string) {
@@ -482,14 +679,20 @@ func SplitArgs(input string) (output []string) {
 			}
 			activeQuote = char
 
-		// encounter a character
+		// encounter a character outside of quote
 		case !unicode.IsSpace(char):
+
 			if buffer.Len() > 0 && isSpaceOnly {
 				output = append(output, buffer.String())
 				buffer.Reset()
 			}
-			isSpaceOnly = false
 
+			if char == '|' {
+				output = append(output, "|")
+				continue
+			}
+
+			isSpaceOnly = false
 			buffer.WriteRune(char)
 
 		case unicode.IsSpace(char):
