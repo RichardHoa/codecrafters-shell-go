@@ -16,7 +16,7 @@ import (
 )
 
 var redirectionsOperators = []string{">", "1>", ">>", "1>>", "2>", "2>>"}
-var builtinTools = []string{"type", "exit", "echo", "pwd"}
+var builtinTools = []string{"type", "exit", "echo", "pwd", "history"}
 
 func main() {
 	completer := NewCommandCompleter()
