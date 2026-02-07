@@ -19,6 +19,7 @@ var redirectionsOperators = []string{">", "1>", ">>", "1>>", "2>", "2>>"}
 var builtinTools = []string{"type", "exit", "echo", "pwd"}
 
 func main() {
+	fileLog("Hello")
 	completer := NewCommandCompleter()
 
 	statefulComplter := CustomCompleter{
@@ -584,6 +585,41 @@ func printErr(errString string) {
 
 }
 
+func outputError(errorOutput string, redirectTarget redirectionTargets) {
+	redirectPath := redirectTarget.errRedirect
+	appendPath := redirectTarget.errAppend
+
+	if appendPath == "" && redirectPath == "" {
+		printErr(errorOutput)
+		return
+	}
+
+	writeToFile(redirectPath, errorOutput, false)
+
+	writeToFile(appendPath, errorOutput, true)
+}
+
+func outputSuccess(successOutput string, redirectTarget redirectionTargets) {
+	redirectPath := redirectTarget.outputRedirect
+	appendPath := redirectTarget.outputAppend
+
+	if redirectPath == "" && appendPath == "" {
+		_, err := fmt.Fprintf(os.Stdout, "%s", successOutput)
+
+		if err != nil {
+			str := fmt.Sprintf("Error while printing sucess value to the console: %s", err)
+			outputError(str, redirectTarget)
+		}
+
+		return
+	}
+
+	writeToFile(redirectPath, successOutput, false)
+
+	writeToFile(appendPath, successOutput, true)
+
+}
+
 type redirectionTargets struct {
 	outputRedirect string
 	errRedirect    string
@@ -639,17 +675,18 @@ func SplitArgs(input string) (output []string) {
 	var activeQuote rune
 	var isSpaceOnly bool
 	var isNextCharLiteral bool
-	var isSkipNextChar bool
+	var isSkip bool
 
 	for index, char := range input {
 
 		switch {
 
-		case isSkipNextChar:
-			isSkipNextChar = false
+		case isSkip:
+			isSkip = false
 			continue
 
 		case isNextCharLiteral:
+			isSkip = true
 
 			var nextChar rune
 			if index+1 <= len(input)-1 {
@@ -658,25 +695,17 @@ func SplitArgs(input string) (output []string) {
 				nextChar = char
 			}
 
-			if char == '\\' {
-				var escaped rune
-				switch nextChar {
-				case 'n':
-					escaped = '\n'
-				case 't':
-					escaped = '\t'
-				case 'r':
-					escaped = '\r'
-				}
-
-				if escaped != 0 {
-					buffer.WriteRune(escaped)
-					isSkipNextChar = true
-					continue
-				}
+			switch nextChar {
+			case 'n':
+				buffer.WriteRune('\n')
+			case 't':
+				buffer.WriteRune('\t')
+			case 'r':
+				buffer.WriteRune('\r')
+			default:
+				buffer.WriteRune(char)
+				isSkip = false
 			}
-
-			buffer.WriteRune(char)
 			isNextCharLiteral = false
 
 		case char == '\\':
@@ -824,8 +853,10 @@ type CustomCompleter struct {
 }
 
 func (c *CustomCompleter) Do(line []rune, pos int) (newLine [][]rune, length int) {
+	fileLog("Completer.Do called. Line: %q, Pos: %d, TabCount: %d", string(line), pos, c.tabCount)
 
 	matches, length := c.inner.Do(line, pos)
+	fileLog("inner.Do returned %d matches", len(matches))
 
 	if len(matches) == 0 {
 		c.tabCount = 0
@@ -833,34 +864,46 @@ func (c *CustomCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 	}
 
 	if len(matches) == 1 {
+		fileLog("Single match found: %s", string(matches[0]))
 		c.tabCount = 0
+		// IMPORTANT: return 0 length so we APPEND the suffix, not replace the prefix
 		return [][]rune{matches[0]}, 0
 	}
 
 	lcp := findLCP(matches)
+	fileLog("LCP found: %q", string(lcp))
 
+	// If we have a common prefix among matches that is longer than 0 (meaning we can autocomplete something)
 	if len(lcp) > 0 {
+		fileLog("Returning LCP to autocomplete: %q", string(lcp))
 		c.tabCount = 0
 		return [][]rune{lcp}, 0
 	}
 
+	// Multiple matches exist, but no further common characters can be added.
 	c.tabCount++
+	fileLog("Multiple matches, no LCP. TabCount increased to %d", c.tabCount)
 
 	if c.tabCount == 1 {
+		// First Tab: Ring the bell.
 		fmt.Print("\x07")
 		return nil, 0
 	}
 
+	// Second Tab: Show all possibilities.
 	var suggestions []string
-	prefix := string(line)
+	prefix := string(line) // The text we typed so far (e.g., "xyz_")
 
 	for _, m := range matches {
+		// Reconstruct full word: Prefix + Suffix (e.g., "xyz_" + "ant")
 		fullWord := prefix + string(m)
 		suggestions = append(suggestions, fullWord)
 	}
 
 	sort.Strings(suggestions)
+	fileLog("Printing suggestions: %v", suggestions)
 
+	// Format output to match shell style (names separated by spaces)
 	fmt.Printf("\n%s\n", strings.Join(suggestions, " "))
 	fmt.Printf("$ %s", string(line))
 
@@ -868,20 +911,25 @@ func (c *CustomCompleter) Do(line []rune, pos int) (newLine [][]rune, length int
 	return nil, 0
 }
 
+func fileLog(format string, args ...any) {
+	f, err := os.OpenFile("log.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+	fmt.Fprintf(f, format+"\n", args...)
+}
+
 type BellListener struct {
 	completer *CustomCompleter
 }
 
 func (b *BellListener) OnChange(line []rune, pos int, key rune) (newLine []rune, newPos int, ok bool) {
-	if key == '\t' {
-		lineSoFar := line[:pos]
+	// REMOVE the manual call to b.completer.Do here.
+	// readline calls AutoComplete.Do automatically on Tab.
 
-		matches, _ := b.completer.Do(lineSoFar, len(lineSoFar))
-
-		if len(matches) == 0 {
-			fmt.Print("\x07")
-		}
-	} else {
+	if key != '\t' {
+		// Reset the tab count if the user types anything else
 		b.completer.tabCount = 0
 	}
 	return nil, 0, false
