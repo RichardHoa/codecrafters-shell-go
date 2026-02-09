@@ -101,28 +101,37 @@ func main() {
 }
 
 func (history *historyCache) LoadHistory(mode, filePath string) error {
-	if mode != "-r" {
-		return nil
-	}
-
-	file, err := os.Open(filePath)
-	if err != nil {
-		return err
-	}
-
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		cmd := scanner.Text()
-
-		if strings.TrimSpace(cmd) != "" {
-			history.memory = append(history.memory, cmd)
+	if mode == "-r" {
+		file, err := os.Open(filePath)
+		if err != nil {
+			return err
 		}
-	}
 
-	if err := scanner.Err(); err != nil {
-		return err
+		defer file.Close()
+
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			cmd := scanner.Text()
+
+			if strings.TrimSpace(cmd) != "" {
+				history.memory = append(history.memory, cmd)
+			}
+		}
+
+		if err := scanner.Err(); err != nil {
+			return err
+		}
+	} else if mode == "-w" {
+		var builder strings.Builder
+
+		for _, val := range history.memory {
+			str := fmt.Sprintf("%s\n", val)
+			builder.WriteString(str)
+		}
+
+		// builder.WriteString("\n")
+
+		writeToFile(filePath, builder.String(), false)
 	}
 
 	return nil
@@ -135,8 +144,9 @@ func handleHistory(history *historyCache, noSpaceArgs []string) {
 		err               error
 	)
 
+	flags := []string{"-r", "-w"}
 	if len(noSpaceArgs) >= 2 {
-		if noSpaceArgs[1] == "-r" {
+		if slices.Index(flags, noSpaceArgs[1]) != -1 {
 			err = history.LoadHistory(noSpaceArgs[1], noSpaceArgs[2])
 			if err != nil {
 				outputStream(
@@ -146,7 +156,6 @@ func handleHistory(history *historyCache, noSpaceArgs []string) {
 				)
 			}
 			return
-
 		}
 
 		if slices.Index(redirectionsOperators, noSpaceArgs[1]) == -1 {

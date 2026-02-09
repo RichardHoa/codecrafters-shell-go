@@ -1,0 +1,6 @@
+rm test.txt
+nah
+nothing
+history
+history -w test.txt
+
