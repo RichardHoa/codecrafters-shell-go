@@ -29,6 +29,10 @@ type historyCache struct {
 func main() {
 	var history historyCache
 
+	if os.Getenv("HISTFILE") != "" {
+		history.handleFlag("-r", os.Getenv("HISTFILE"))
+	}
+
 	completer := NewCommandCompleter()
 
 	statefulComplter := CustomCompleter{
@@ -101,7 +105,7 @@ func main() {
 	}
 }
 
-func (history *historyCache) LoadHistory(mode, filePath string) error {
+func (history *historyCache) handleFlag(mode, filePath string) error {
 	if mode == "-r" {
 		file, err := os.Open(filePath)
 		if err != nil {
@@ -189,7 +193,7 @@ func handleHistory(history *historyCache, noSpaceArgs []string) {
 	flags := []string{"-r", "-w", "-a"}
 	if len(noSpaceArgs) >= 2 {
 		if slices.Index(flags, noSpaceArgs[1]) != -1 {
-			err = history.LoadHistory(noSpaceArgs[1], noSpaceArgs[2])
+			err = history.handleFlag(noSpaceArgs[1], noSpaceArgs[2])
 			if err != nil {
 				outputStream(
 					strings.NewReader(err.Error()),
