@@ -1,0 +1,7 @@
+Initial one
+Initial two
+echo banana grape
+echo orange apple banana
+history -a history.txt
+echo mango orange pear
+history -a history.txt

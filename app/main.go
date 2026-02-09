@@ -21,8 +21,9 @@ var redirectionsOperators = []string{">", "1>", ">>", "1>>", "2>", "2>>"}
 var builtinTools = []string{"type", "exit", "echo", "pwd", "history"}
 
 type historyCache struct {
-	memory []string
-	file   *os.File
+	memory        []string
+	file          *os.File
+	lastSavedLine int
 }
 
 func main() {
@@ -129,9 +130,50 @@ func (history *historyCache) LoadHistory(mode, filePath string) error {
 			builder.WriteString(str)
 		}
 
-		// builder.WriteString("\n")
+		writeToFile(filePath, builder.String(), false)
+	} else if mode == "-a" {
+		var fileCommands []string
+		file, err := os.Open(filePath)
+		if err != nil {
+			return err
+		}
+
+		defer file.Close()
+
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			cmd := scanner.Text()
+
+			if strings.TrimSpace(cmd) != "" {
+				fileCommands = append(fileCommands, cmd)
+			}
+		}
+
+		if err := scanner.Err(); err != nil {
+			return err
+		}
+
+		var builder strings.Builder
+		for _, val := range fileCommands {
+			str := fmt.Sprintf("%s\n", val)
+			builder.WriteString(str)
+		}
+
+		for index, val := range history.memory {
+
+			if history.lastSavedLine != 0 {
+				if index <= history.lastSavedLine {
+					continue
+				}
+			}
+
+			history.lastSavedLine = index
+			str := fmt.Sprintf("%s\n", val)
+			builder.WriteString(str)
+		}
 
 		writeToFile(filePath, builder.String(), false)
+
 	}
 
 	return nil
@@ -144,7 +186,7 @@ func handleHistory(history *historyCache, noSpaceArgs []string) {
 		err               error
 	)
 
-	flags := []string{"-r", "-w"}
+	flags := []string{"-r", "-w", "-a"}
 	if len(noSpaceArgs) >= 2 {
 		if slices.Index(flags, noSpaceArgs[1]) != -1 {
 			err = history.LoadHistory(noSpaceArgs[1], noSpaceArgs[2])
