@@ -1,2 +1,2 @@
-# TODO
-Reimplement the split function and fix all the other funcitons before coming to echo again
+# Status
+Pass most of the test cases, sometime we failed the auto complete part, I don't know why, too lazy to find out
