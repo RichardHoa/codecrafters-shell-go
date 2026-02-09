@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"unicode"
@@ -79,7 +80,7 @@ func main() {
 		case "pwd":
 			handlePWD(noSpaceArgs)
 		case "history":
-			handleHistory(historyMemory)
+			handleHistory(historyMemory, noSpaceArgs)
 		case "type":
 			handleType(noSpaceArgs)
 		case "exit":
@@ -93,13 +94,34 @@ func main() {
 	}
 }
 
-func handleHistory(memory []string) {
+func handleHistory(memory []string, noSpaceArgs []string) {
+	var limit, skipAmount int
+	var err error
+
+	if len(noSpaceArgs) >= 2 {
+		limit, err = strconv.Atoi(noSpaceArgs[1])
+		skipAmount = len(memory) - limit
+	}
+	if err != nil {
+		outputStream(
+			strings.NewReader(err.Error()),
+			redirectionTargets{},
+			true,
+		)
+	}
+
 	var result strings.Builder
 	for index, command := range memory {
+		if skipAmount != 0 {
+			if skipAmount > index {
+				continue
+			}
+		}
+
 		str := fmt.Sprintf("    %v  %v\n", index, command)
 		result.WriteString(str)
-		// debug(str)
 	}
+
 	outputStream(
 		strings.NewReader(result.String()),
 		redirectionTargets{},
