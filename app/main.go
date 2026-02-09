@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -19,8 +20,13 @@ import (
 var redirectionsOperators = []string{">", "1>", ">>", "1>>", "2>", "2>>"}
 var builtinTools = []string{"type", "exit", "echo", "pwd", "history"}
 
+type historyCache struct {
+	memory []string
+	file   *os.File
+}
+
 func main() {
-	var historyMemory []string
+	var history historyCache
 
 	completer := NewCommandCompleter()
 
@@ -47,7 +53,7 @@ func main() {
 		}
 
 		cleanedLine := strings.TrimSpace(line)
-		historyMemory = append(historyMemory, cleanedLine)
+		history.memory = append(history.memory, cleanedLine)
 
 		// goes to the next line
 		fmt.Print("\r")
@@ -80,7 +86,7 @@ func main() {
 		case "pwd":
 			handlePWD(noSpaceArgs)
 		case "history":
-			handleHistory(historyMemory, noSpaceArgs)
+			handleHistory(&history, noSpaceArgs)
 		case "type":
 			handleType(noSpaceArgs)
 		case "exit":
@@ -94,24 +100,73 @@ func main() {
 	}
 }
 
-func handleHistory(memory []string, noSpaceArgs []string) {
-	var limit, skipAmount int
-	var err error
+func (history *historyCache) LoadHistory(mode, filePath string) error {
+	if mode != "-r" {
+		return nil
+	}
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		cmd := scanner.Text()
+
+		if strings.TrimSpace(cmd) != "" {
+			history.memory = append(history.memory, cmd)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func handleHistory(history *historyCache, noSpaceArgs []string) {
+	redirectionTargets := findRedirectionTargets(noSpaceArgs)
+	var (
+		limit, skipAmount int
+		err               error
+	)
 
 	if len(noSpaceArgs) >= 2 {
-		limit, err = strconv.Atoi(noSpaceArgs[1])
-		skipAmount = len(memory) - limit
-	}
-	if err != nil {
-		outputStream(
-			strings.NewReader(err.Error()),
-			redirectionTargets{},
-			true,
-		)
+		if noSpaceArgs[1] == "-r" {
+			err = history.LoadHistory(noSpaceArgs[1], noSpaceArgs[2])
+			if err != nil {
+				outputStream(
+					strings.NewReader(err.Error()),
+					redirectionTargets,
+					true,
+				)
+			}
+			return
+
+		}
+
+		if slices.Index(redirectionsOperators, noSpaceArgs[1]) == -1 {
+			limit, err = strconv.Atoi(noSpaceArgs[1])
+			skipAmount = len(history.memory) - limit
+
+			if err != nil {
+				outputStream(
+					strings.NewReader(err.Error()),
+					redirectionTargets,
+					true,
+				)
+				return
+			}
+		}
+
 	}
 
 	var result strings.Builder
-	for index, command := range memory {
+	for index, command := range history.memory {
 		if skipAmount != 0 {
 			if skipAmount > index {
 				continue
@@ -124,7 +179,7 @@ func handleHistory(memory []string, noSpaceArgs []string) {
 
 	outputStream(
 		strings.NewReader(result.String()),
-		redirectionTargets{},
+		redirectionTargets,
 		false,
 	)
 }
