@@ -20,18 +20,8 @@ import (
 var redirectionsOperators = []string{">", "1>", ">>", "1>>", "2>", "2>>"}
 var builtinTools = []string{"type", "exit", "echo", "pwd", "history"}
 
-type historyCache struct {
-	memory        []string
-	file          *os.File
-	lastSavedLine int
-}
-
 func main() {
-	var history historyCache
-
-	if os.Getenv("HISTFILE") != "" {
-		history.handleFlag("-r", os.Getenv("HISTFILE"))
-	}
+	history := NewHistory()
 
 	completer := NewCommandCompleter()
 
@@ -57,6 +47,7 @@ func main() {
 			break
 		}
 
+		// add cleaned command to history
 		cleanedLine := strings.TrimSpace(line)
 		history.memory = append(history.memory, cleanedLine)
 
@@ -95,6 +86,7 @@ func main() {
 		case "type":
 			handleType(noSpaceArgs)
 		case "exit":
+			// write to history file at the end
 			if os.Getenv("HISTFILE") != "" {
 				history.handleFlag("-w", os.Getenv("HISTFILE"))
 			}
@@ -106,140 +98,6 @@ func main() {
 		}
 
 	}
-}
-
-func (history *historyCache) handleFlag(mode, filePath string) error {
-	if mode == "-r" {
-		file, err := os.Open(filePath)
-		if err != nil {
-			return err
-		}
-
-		defer file.Close()
-
-		scanner := bufio.NewScanner(file)
-		for scanner.Scan() {
-			cmd := scanner.Text()
-
-			if strings.TrimSpace(cmd) != "" {
-				history.memory = append(history.memory, cmd)
-			}
-		}
-
-		if err := scanner.Err(); err != nil {
-			return err
-		}
-	} else if mode == "-w" {
-		var builder strings.Builder
-
-		for _, val := range history.memory {
-			str := fmt.Sprintf("%s\n", val)
-			builder.WriteString(str)
-		}
-
-		writeToFile(filePath, builder.String(), false)
-	} else if mode == "-a" {
-		var fileCommands []string
-		file, err := os.Open(filePath)
-		if err != nil {
-			return err
-		}
-
-		defer file.Close()
-
-		scanner := bufio.NewScanner(file)
-		for scanner.Scan() {
-			cmd := scanner.Text()
-
-			if strings.TrimSpace(cmd) != "" {
-				fileCommands = append(fileCommands, cmd)
-			}
-		}
-
-		if err := scanner.Err(); err != nil {
-			return err
-		}
-
-		var builder strings.Builder
-		for _, val := range fileCommands {
-			str := fmt.Sprintf("%s\n", val)
-			builder.WriteString(str)
-		}
-
-		for index, val := range history.memory {
-
-			if history.lastSavedLine != 0 {
-				if index <= history.lastSavedLine {
-					continue
-				}
-			}
-
-			history.lastSavedLine = index
-			str := fmt.Sprintf("%s\n", val)
-			builder.WriteString(str)
-		}
-
-		writeToFile(filePath, builder.String(), false)
-
-	}
-
-	return nil
-}
-
-func handleHistory(history *historyCache, noSpaceArgs []string) {
-	redirectionTargets := findRedirectionTargets(noSpaceArgs)
-	var (
-		limit, skipAmount int
-		err               error
-	)
-
-	flags := []string{"-r", "-w", "-a"}
-	if len(noSpaceArgs) >= 2 {
-		if slices.Index(flags, noSpaceArgs[1]) != -1 {
-			err = history.handleFlag(noSpaceArgs[1], noSpaceArgs[2])
-			if err != nil {
-				outputStream(
-					strings.NewReader(err.Error()),
-					redirectionTargets,
-					true,
-				)
-			}
-			return
-		}
-
-		if slices.Index(redirectionsOperators, noSpaceArgs[1]) == -1 {
-			limit, err = strconv.Atoi(noSpaceArgs[1])
-			skipAmount = len(history.memory) - limit
-
-			if err != nil {
-				outputStream(
-					strings.NewReader(err.Error()),
-					redirectionTargets,
-					true,
-				)
-				return
-			}
-		}
-
-	}
-
-	var result strings.Builder
-	for index, command := range history.memory {
-		if skipAmount != 0 {
-			if skipAmount > index {
-				continue
-			}
-		}
-
-		str := fmt.Sprintf("    %v  %v\n", index, command)
-		result.WriteString(str)
-	}
-
-	outputStream(
-		strings.NewReader(result.String()),
-		redirectionTargets,
-		false,
-	)
 }
 
 func handlePipe(args []string) {
@@ -1083,4 +941,153 @@ func NewCommandCompleter() (completer *readline.PrefixCompleter) {
 
 	return completer
 
+}
+
+type historyCache struct {
+	memory        []string
+	lastSavedLine int
+}
+
+func NewHistory() historyCache {
+	var history historyCache
+
+	if os.Getenv("HISTFILE") != "" {
+		history.handleFlag("-r", os.Getenv("HISTFILE"))
+	}
+
+	return history
+}
+
+func (history *historyCache) handleFlag(mode, filePath string) error {
+	switch mode {
+	case "-r":
+		file, err := os.Open(filePath)
+		if err != nil {
+			return err
+		}
+
+		defer file.Close()
+
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			cmd := scanner.Text()
+
+			if strings.TrimSpace(cmd) != "" {
+				history.memory = append(history.memory, cmd)
+			}
+		}
+
+		if err := scanner.Err(); err != nil {
+			return err
+		}
+
+	case "-w":
+		var builder strings.Builder
+
+		for _, val := range history.memory {
+			str := fmt.Sprintf("%s\n", val)
+			builder.WriteString(str)
+		}
+
+		writeToFile(filePath, builder.String(), false)
+
+	case "-a":
+		var fileCommands []string
+		file, err := os.Open(filePath)
+		if err != nil {
+			return err
+		}
+
+		defer file.Close()
+
+		scanner := bufio.NewScanner(file)
+		// step 1. Read all the command from the file
+		for scanner.Scan() {
+			cmd := scanner.Text()
+			if strings.TrimSpace(cmd) != "" {
+				fileCommands = append(fileCommands, cmd)
+			}
+		}
+
+		if err := scanner.Err(); err != nil {
+			return err
+		}
+
+		var builder strings.Builder
+		// step 2. Add all the fileCommands to the builder
+		for _, val := range fileCommands {
+			str := fmt.Sprintf("%s\n", val)
+			builder.WriteString(str)
+		}
+
+		// add selected command to the builders
+		for index, val := range history.memory {
+			// because this is append, we only add from the last saved line
+			if history.lastSavedLine != 0 {
+				if index <= history.lastSavedLine {
+					continue
+				}
+			}
+
+			history.lastSavedLine = index
+			str := fmt.Sprintf("%s\n", val)
+			builder.WriteString(str)
+		}
+
+		// we write to the old file, override all the old content
+		writeToFile(filePath, builder.String(), false)
+	}
+
+	return nil
+}
+
+func handleHistory(history *historyCache, noSpaceArgs []string) {
+	redirectionTargets := findRedirectionTargets(noSpaceArgs)
+
+	var (
+		limit, skipAmount int
+		err               error
+	)
+
+	if len(noSpaceArgs) >= 2 {
+		flags := []string{"-r", "-w", "-a"}
+		// check if the flag is one of the correct flag
+		if slices.Index(flags, noSpaceArgs[1]) != -1 {
+			err = history.handleFlag(noSpaceArgs[1], noSpaceArgs[2])
+			if err != nil {
+				outputStream(
+					strings.NewReader(err.Error()),
+					redirectionTargets,
+					true,
+				)
+			}
+			// here we assume the command can neither be history -flag or history n
+			// it cannot be history -n -flag at the same time
+			return
+		}
+
+		limit, err = strconv.Atoi(noSpaceArgs[1])
+		if err == nil {
+			skipAmount = len(history.memory) - limit
+		}
+
+	}
+
+	var result strings.Builder
+	for index, command := range history.memory {
+		if skipAmount != 0 {
+			if skipAmount > index {
+				continue
+			}
+		}
+
+		str := fmt.Sprintf("    %v  %v\n", index, command)
+		result.WriteString(str)
+	}
+
+	outputStream(
+		strings.NewReader(result.String()),
+		redirectionTargets,
+		false,
+	)
 }
