@@ -95,6 +95,9 @@ func main() {
 		case "type":
 			handleType(noSpaceArgs)
 		case "exit":
+			if os.Getenv("HISTFILE") != "" {
+				history.handleFlag("-w", os.Getenv("HISTFILE"))
+			}
 			handleExit()
 		case "echo":
 			handleEcho(args)
