@@ -19,6 +19,8 @@ var redirectionsOperators = []string{">", "1>", ">>", "1>>", "2>", "2>>"}
 var builtinTools = []string{"type", "exit", "echo", "pwd", "history"}
 
 func main() {
+	var historyMemory []string
+
 	completer := NewCommandCompleter()
 
 	statefulComplter := CustomCompleter{
@@ -42,6 +44,9 @@ func main() {
 		if err != nil {
 			break
 		}
+
+		cleanedLine := strings.TrimSpace(line)
+		historyMemory = append(historyMemory, cleanedLine)
 
 		// goes to the next line
 		fmt.Print("\r")
@@ -73,6 +78,8 @@ func main() {
 			handleCD(noSpaceArgs)
 		case "pwd":
 			handlePWD(noSpaceArgs)
+		case "history":
+			handleHistory(historyMemory)
 		case "type":
 			handleType(noSpaceArgs)
 		case "exit":
@@ -84,6 +91,20 @@ func main() {
 		}
 
 	}
+}
+
+func handleHistory(memory []string) {
+	var result strings.Builder
+	for index, command := range memory {
+		str := fmt.Sprintf("    %v  %v\n", index, command)
+		result.WriteString(str)
+		// debug(str)
+	}
+	outputStream(
+		strings.NewReader(result.String()),
+		redirectionTargets{},
+		false,
+	)
 }
 
 func handlePipe(args []string) {
